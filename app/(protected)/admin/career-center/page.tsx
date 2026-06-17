@@ -1,0 +1,317 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { createJob, updateJob, deleteJob, toggleJobStatus } from '@/lib/actions/jobs'
+import { Badge } from '@/components/ui/badge'
+import type { Job } from '@/types/database'
+import { Toaster, toast } from 'sonner'
+
+const emptyForm: {
+  title: string
+  company: string
+  location: string
+  type: 'Full-time' | 'Part-time' | 'Contract' | 'Internship'
+  salary: string
+  description: string
+  skills: string
+  contact_info: string
+  is_active: boolean
+} = {
+  title: '',
+  company: '',
+  location: '',
+  type: 'Full-time',
+  salary: '',
+  description: '',
+  skills: '',
+  contact_info: '',
+  is_active: true,
+}
+
+export default function AdminCareerCenterPage() {
+  const [jobs, setJobs] = useState<Job[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showModal, setShowModal] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [form, setForm] = useState(emptyForm)
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => { loadJobs() }, [])
+
+  async function loadJobs() {
+    try {
+      const supabase = createClient()
+      const { data } = await supabase.from('jobs').select('*').order('created_at', { ascending: false })
+      if (data) setJobs(data as Job[])
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Gagal memuat data')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function openAdd() {
+    setForm(emptyForm)
+    setEditingId(null)
+    setShowModal(true)
+  }
+
+  function openEdit(job: Job) {
+    setForm({
+      title: job.title,
+      company: job.company,
+      location: job.location,
+      type: job.type,
+      salary: job.salary || '',
+      description: job.description,
+      skills: (job.skills || []).join(', '),
+      contact_info: job.contact_info || '',
+      is_active: job.is_active,
+    })
+    setEditingId(job.id)
+    setShowModal(true)
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setSubmitting(true)
+    try {
+      const fd = new FormData()
+      fd.append('title', form.title)
+      fd.append('company', form.company)
+      fd.append('location', form.location)
+      fd.append('type', form.type)
+      fd.append('salary', form.salary)
+      fd.append('description', form.description)
+      fd.append('skills', form.skills)
+      fd.append('contact_info', form.contact_info)
+      fd.append('is_active', form.is_active ? 'true' : 'false')
+
+      if (editingId) {
+        await updateJob(editingId, fd)
+        toast.success('Lowongan berhasil diperbarui')
+      } else {
+        await createJob(fd)
+        toast.success('Lowongan berhasil dipublikasikan')
+      }
+
+      setShowModal(false)
+      loadJobs()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Terjadi kesalahan')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleToggleActive(job: Job) {
+    try {
+      await toggleJobStatus(job.id, !job.is_active)
+      toast.success(`Lowongan ${job.is_active ? 'dinonaktifkan' : 'diaktifkan'}`)
+      loadJobs()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Terjadi kesalahan')
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm('Yakin ingin menghapus lowongan ini?')) return
+    try {
+      await deleteJob(id)
+      toast.success('Lowongan berhasil dihapus')
+      loadJobs()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Terjadi kesalahan')
+    }
+  }
+
+  return (
+    <div className="space-y-8">
+      <Toaster position="top-center" />
+      {/* Header */}
+      <div className="space-y-1.5 animate-fade-in-up">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-amikom-purple text-amikom-jonquil-warm text-[10px]">💼</span>
+          <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-slate-500">Career Center</p>
+        </div>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="font-sans text-3xl md:text-4xl font-semibold tracking-[-0.03em] text-slate-900 leading-[1.1]">
+              Kelola Lowongan.
+            </h1>
+            <p className="text-slate-600">Publikasikan dan kelola lowongan kerja untuk alumni.</p>
+          </div>
+          <button onClick={openAdd}
+            className="rounded-md bg-amikom-purple px-5 py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98] hover:bg-amikom-purple-hover hover:text-amikom-jonquil-warm">
+            + Tambah
+          </button>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="flex gap-4 text-sm text-slate-600 font-mono animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
+        <span><span className="text-slate-900 font-medium">{jobs.length}</span> total</span>
+        <span><span className="text-amikom-purple font-medium">{jobs.filter(j => j.is_active).length}</span> aktif</span>
+        <span><span className="text-slate-500">{jobs.filter(j => !j.is_active).length}</span> nonaktif</span>
+      </div>
+
+      {/* Job List */}
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <span className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-amikom-purple border-t-transparent" />
+        </div>
+      ) : jobs.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-lg border border-slate-200 bg-white p-16 shadow-sm">
+          <span className="text-3xl text-slate-500">💼</span>
+          <p className="mt-4 text-sm text-slate-500">Belum ada lowongan kerja</p>
+          <button onClick={openAdd} className="mt-4 rounded-md bg-amikom-purple px-5 py-2.5 text-sm font-semibold text-amikom-jonquil-warm transition-all active:scale-[0.98] hover:bg-amikom-purple-hover">
+            Tambah Lowongan
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-4 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+          {jobs.map((job) => (
+            <div key={job.id} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition-all hover:shadow-sm">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3">
+                    <h3 className="font-sans text-base font-semibold text-slate-900">{job.title}</h3>
+                    <Badge variant={(job.type === 'Full-time' ? 'default' : job.type === 'Internship' ? 'warning' : 'secondary') as 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning'}>
+                      {job.type}
+                    </Badge>
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-mono font-medium ${
+                      job.is_active ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'
+                    }`}>
+                      {job.is_active ? 'Aktif' : 'Nonaktif'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-sm text-amikom-purple font-medium">{job.company}</span>
+                    <span className="text-slate-400">·</span>
+                    <span className="text-sm text-slate-500">{job.location}</span>
+                  </div>
+                  <p className="mt-2 text-sm text-slate-600 line-clamp-2">{job.description}</p>
+                  {job.skills && job.skills.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {job.skills.map((skill) => (
+                        <span key={skill} className="inline-flex items-center rounded-md bg-slate-50 border border-slate-200 px-2 py-0.5 text-[10px] font-mono text-slate-600">{skill}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 ml-4">
+                  <button onClick={() => handleToggleActive(job)}
+                    className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-all hover:border-slate-400 hover:text-slate-900">
+                    {job.is_active ? 'Nonaktifkan' : 'Aktifkan'}
+                  </button>
+                  <button onClick={() => openEdit(job)}
+                    className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-all hover:border-slate-400 hover:text-slate-900">
+                    Edit
+                  </button>
+                  <button onClick={() => handleDelete(job.id)}
+                    className="rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 transition-all hover:bg-red-50 hover:border-red-300">
+                    Hapus
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Modal Form */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+          <div className="w-full max-w-lg mx-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm animate-fade-in-up max-h-[85vh] overflow-y-auto">
+            <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-slate-500 mb-4">
+              {editingId ? 'Edit Lowongan' : 'Tambah Lowongan'}
+            </p>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Judul</label>
+                  <input type="text" required value={form.title} onChange={(e) => setForm(f => ({ ...f, title: e.target.value }))}
+                    placeholder="Senior Frontend Engineer"
+                    className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20" />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Tipe</label>
+                  <select value={form.type} onChange={(e) => setForm(f => ({ ...f, type: e.target.value as 'Full-time' | 'Part-time' | 'Contract' | 'Internship' }))}
+                    className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20">
+                    <option value="Full-time">Full-time</option>
+                    <option value="Part-time">Part-time</option>
+                    <option value="Contract">Contract</option>
+                    <option value="Internship">Internship</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Perusahaan</label>
+                  <input type="text" required value={form.company} onChange={(e) => setForm(f => ({ ...f, company: e.target.value }))}
+                    placeholder="Nama perusahaan"
+                    className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20" />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Lokasi</label>
+                  <input type="text" required value={form.location} onChange={(e) => setForm(f => ({ ...f, location: e.target.value }))}
+                    placeholder="Jakarta, Remote"
+                    className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20" />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Gaji (opsional)</label>
+                <input type="text" value={form.salary} onChange={(e) => setForm(f => ({ ...f, salary: e.target.value }))}
+                  placeholder="Rp 15-25 jt"
+                  className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20" />
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Deskripsi</label>
+                <textarea required value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} rows={4}
+                  placeholder="Deskripsi lowongan..."
+                  className="w-full rounded-md border border-amikom-hairline bg-amikom-canvas px-3.5 py-2.5 text-sm text-amikom-ink placeholder-amikom-ink/30 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20 resize-none" />
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Skills (pisahkan dengan koma)</label>
+                <input type="text" value={form.skills} onChange={(e) => setForm(f => ({ ...f, skills: e.target.value }))}
+                  placeholder="React, TypeScript, Next.js"
+                  className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20" />
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Kontak (opsional)</label>
+                <input type="text" value={form.contact_info} onChange={(e) => setForm(f => ({ ...f, contact_info: e.target.value }))}
+                  placeholder="Email atau nomor telepon"
+                  className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20" />
+              </div>
+
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={form.is_active} onChange={(e) => setForm(f => ({ ...f, is_active: e.target.checked }))}
+                  className="h-4 w-4 rounded border-slate-300 text-amikom-purple focus:ring-amikom-purple/20" />
+                <span className="text-sm text-slate-600">Publikasikan segera</span>
+              </label>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setShowModal(false)}
+                  className="rounded-md border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-600 transition-all hover:border-slate-400 hover:text-slate-900">
+                  Batal
+                </button>
+                <button type="submit" disabled={submitting}
+                  className="rounded-md bg-amikom-purple px-5 py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98] hover:bg-amikom-purple-hover hover:text-amikom-jonquil-warm disabled:opacity-50 flex items-center gap-2">
+                  {submitting ? (
+                    <><span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Menyimpan...</>
+                  ) : editingId ? 'Simpan' : 'Publikasikan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
