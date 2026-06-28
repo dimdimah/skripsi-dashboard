@@ -13,7 +13,7 @@ const ALLOWED_DOMAIN = 'amikomsolo.ac.id'
 export async function login(_prevState: LoginState, formData: FormData): Promise<LoginState> {
   const email = (formData.get('email') as string) || ''
 
-  if (!email.endsWith(`@${ALLOWED_DOMAIN}`)) {
+  if (!email.toLowerCase().endsWith(`@${ALLOWED_DOMAIN.toLowerCase()}`)) {
     return { error: `Hanya email @${ALLOWED_DOMAIN} yang diizinkan`, redirectTo: null }
   }
 

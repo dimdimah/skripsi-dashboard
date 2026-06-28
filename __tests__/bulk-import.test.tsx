@@ -117,7 +117,7 @@ describe("TC 3.1 — Bulk Import Parsing (Simulasi Excel)", () => {
     const validRow = {
       nim: "A12345",
       full_name: "Budi Santoso",
-      email: "a12345@amikomsurakarta.ac.id",
+      email: "a12345@amikomsolo.ac.id",
       tanggal_lahir: "01012000",
     }
 
@@ -168,19 +168,19 @@ describe("TC 3.1 — Bulk Import Parsing (Simulasi Excel)", () => {
         {
           nim: "A001",
           full_name: "User 1",
-          email: "a001@amikomsurakarta.ac.id",
+          email: "a001@amikomsolo.ac.id",
           tanggal_lahir: "01012000",
         },
         {
           nim: "A002",
           full_name: "User 2",
-          email: "a002@amikomsurakarta.ac.id",
+          email: "a002@amikomsolo.ac.id",
           tanggal_lahir: "02022000",
         },
         {
           nim: "A003",
           full_name: "User 3",
-          email: "a003@amikomsurakarta.ac.id",
+          email: "a003@amikomsolo.ac.id",
           tanggal_lahir: "03032000",
         },
       ])
@@ -196,7 +196,7 @@ describe("TC 3.1 — Bulk Import Parsing (Simulasi Excel)", () => {
         {
           nim: "A001",
           full_name: "Valid User",
-          email: "a001@amikomsurakarta.ac.id",
+          email: "a001@amikomsolo.ac.id",
           tanggal_lahir: "01012000",
         },
         {
@@ -221,7 +221,7 @@ describe("TC 3.1 — Bulk Import Parsing (Simulasi Excel)", () => {
         {
           nim: "A001",
           full_name: "User",
-          email: "a001@amikomsurakarta.ac.id",
+          email: "a001@amikomsolo.ac.id",
           tanggal_lahir: "01012000",
         },
       ])
@@ -234,7 +234,7 @@ describe("TC 3.1 — Bulk Import Parsing (Simulasi Excel)", () => {
         {
           nim: "A001",
           full_name: "User",
-          email: "a001@amikomsurakarta.ac.id",
+          email: "a001@amikomsolo.ac.id",
           tanggal_lahir: "01012000",
           graduation_year: "2024",
         },
@@ -248,7 +248,7 @@ describe("TC 3.1 — Bulk Import Parsing (Simulasi Excel)", () => {
         {
           nim: "A001",
           full_name: "User",
-          email: "a001@amikomsurakarta.ac.id",
+          email: "a001@amikomsolo.ac.id",
           tanggal_lahir: "01012000",
           graduation_year: "24",
         },

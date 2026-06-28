@@ -5,8 +5,11 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { submitTracerStudy, getTracerStudyResponse } from '@/lib/actions/tracer-study'
 import type { TracerStudyQuestion, TracerStudyResponse } from '@/types/database'
-import { GraduationCap } from 'lucide-react'
-import { Toaster, toast } from 'sonner'
+import { PageHeader } from '@/components/ui/page-header'
+import { GraduationCap, CheckCircle2, Pencil } from 'lucide-react'
+import { toast } from 'sonner'
+
+import { EMPLOYMENT_STATUSES, EDUCATION_LEVELS, SALARY_RANGES, FIELD_MATCH_OPTIONS } from '@/lib/constants'
 
 const steps = ['Data Kelulusan', 'Pendidikan', 'Pekerjaan', 'Saran']
 
@@ -15,6 +18,7 @@ export default function TracerStudyPage() {
   const [currentStep, setCurrentStep] = useState(0)
   const [loading, setLoading] = useState(false)
   const [existingResponse, setExistingResponse] = useState<TracerStudyResponse | null>(null)
+  const [submitted, setSubmitted] = useState(false)
   const [questions, setQuestions] = useState<TracerStudyQuestion[]>([])
   const [formData, setFormData] = useState({
     graduation_year: '',
@@ -31,11 +35,11 @@ export default function TracerStudyPage() {
     async function load() {
       const supabase = createClient()
 
-      // Get existing response to determine user's angkatan
       const existing = await getTracerStudyResponse()
       const existingData = existing as TracerStudyResponse | null
       if (existingData) {
         setExistingResponse(existingData)
+        setSubmitted(true)
         setFormData({
           graduation_year: existingData.graduation_year?.toString() || '',
           education_level: existingData.education_level || '',
@@ -47,36 +51,34 @@ export default function TracerStudyPage() {
           suggestions: existingData.suggestions || '',
         })
 
-        // Load questions for the user's angkatan
         const angkatan = existingData.graduation_year?.toString()
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: qs } = await (supabase.from('tracer_study_questions') as any)
+        const { data: qs } = await supabase
+          .from('tracer_study_questions')
           .select('*')
           .eq('is_active', true)
           .eq('angkatan', angkatan)
           .order('display_order')
-        if (qs) setQuestions(qs as unknown as TracerStudyQuestion[])
+        if (qs) setQuestions(qs as TracerStudyQuestion[])
       } else {
-        // No existing response: try to get angkatan from profile (NIM first 2 digits + 2000)
         const { data: profile } = await supabase
           .from('profiles')
           .select('nim')
-          .single() as { data: { nim: string | null } | null; error: unknown }
+          .single()
         let angkatan = new Date().getFullYear().toString()
-        if (profile?.nim) {
-          const yearPrefix = profile.nim.substring(0, 2)
+        if ((profile as any)?.nim) {
+          const yearPrefix = (profile as any).nim.substring(0, 2)
           const yearNum = parseInt(yearPrefix, 10)
           if (!isNaN(yearNum)) {
             angkatan = `20${yearNum}`
           }
         }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: qs } = await (supabase.from('tracer_study_questions') as any)
+        const { data: qs } = await supabase
+          .from('tracer_study_questions')
           .select('*')
           .eq('is_active', true)
           .eq('angkatan', angkatan)
           .order('display_order')
-        if (qs) setQuestions(qs as unknown as TracerStudyQuestion[])
+        if (qs) setQuestions(qs as TracerStudyQuestion[])
       }
     }
     load()
@@ -94,7 +96,9 @@ export default function TracerStudyPage() {
 
       await submitTracerStudy(fd)
       toast.success(existingResponse ? 'Kuesioner berhasil diperbarui!' : 'Kuesioner berhasil dikirim!')
-      router.refresh()
+      setExistingResponse({ ...formData, graduation_year: Number(formData.graduation_year) } as TracerStudyResponse)
+      setSubmitted(true)
+      setCurrentStep(0)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Terjadi kesalahan')
     } finally {
@@ -124,24 +128,91 @@ export default function TracerStudyPage() {
     }
   }
 
+  function handleEdit() {
+    setSubmitted(false)
+    setCurrentStep(0)
+  }
+
+  // ─── SUBMITTED VIEW ───
+  if (submitted && existingResponse) {
+    return (
+      <div className="page-container space-y-8 pb-8">
+        <div className="space-y-1.5 animate-fade-in-up">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-emerald-500 text-white text-[11px]">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+            </span>
+            <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500">Tracer Study</p>
+          </div>
+          <h1 className="font-sans text-3xl md:text-4xl font-semibold tracking-[-0.03em] text-slate-900 leading-[1.1]">
+            Kuesioner Terkirim.
+          </h1>
+          <p className="text-slate-600">
+            Terima kasih telah mengisi kuesioner tracer study. Data Anda sangat membantu akreditasi kampus.
+          </p>
+        </div>
+
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
+          <div className="flex items-start gap-3">
+            <CheckCircle2 className="h-5 w-5 text-emerald-600 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-emerald-800">Berhasil terkirim</p>
+              <p className="mt-1 text-sm text-emerald-700">
+                Kuesioner Anda telah tersimpan di database. Data akan digunakan untuk laporan akreditasi.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Summary */}
+        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+          <h3 className="text-sm font-semibold text-slate-900 mb-4">Ringkasan Jawaban Anda</h3>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <SummaryItem label="Tahun Lulus" value={formData.graduation_year || '-'} />
+            <SummaryItem label="Pendidikan Terakhir" value={formData.education_level || '-'} />
+            <SummaryItem label="Status Pekerjaan" value={formData.employment_status || '-'} />
+            {formData.company && <SummaryItem label="Perusahaan" value={formData.company} />}
+            {formData.position && <SummaryItem label="Posisi" value={formData.position} />}
+            {formData.salary_range && <SummaryItem label="Kisaran Gaji" value={formData.salary_range} />}
+            {formData.study_field_match && <SummaryItem label="Kesesuaian Bidang" value={formData.study_field_match} />}
+            {formData.suggestions && (
+              <div className="sm:col-span-2">
+                <SummaryItem label="Kritik & Saran" value={formData.suggestions} />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
+          <button
+            onClick={handleEdit}
+            className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 transition-all hover:border-amikom-purple/30 hover:text-amikom-purple"
+          >
+            <Pencil className="h-4 w-4" />
+            Perbarui Jawaban
+          </button>
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="rounded-md bg-amikom-purple px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-amikom-purple-hover hover:text-amikom-jonquil-warm active:scale-[0.98]"
+          >
+            Kembali ke Dashboard
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ─── FORM VIEW ───
   return (
     <div className="page-container space-y-8 pb-8">
-      <Toaster position="top-center" />
-      {/* Header */}
-      <div className="space-y-2 animate-fade-in-up">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-amikom-purple text-amikom-jonquil-warm text-xs">📋</span>
-          <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-slate-500">Tracer Study</p>
-        </div>
-        <h1 className="font-sans text-3xl md:text-4xl font-semibold text-slate-900 leading-[1.1] tracking-[-0.03em]">
-          Kuesioner Alumni.
-        </h1>
-        <p className="text-slate-600">
-          {existingResponse
-            ? 'Anda sudah mengisi kuesioner. Silakan perbarui jika ada perubahan.'
-            : 'Bantu kami melacak jejak karir alumni STMIK Amikom Surakarta.'}
-        </p>
-      </div>
+      <PageHeader
+        icon={<span className="text-[11px]">📋</span>}
+        label="Tracer Study"
+        title="Kuesioner Alumni."
+        subtitle={existingResponse
+          ? 'Anda sudah mengisi kuesioner. Silakan perbarui jika ada perubahan.'
+          : 'Bantu kami melacak jejak karir alumni STMIK Amikom Surakarta.'}
+      />
 
       {/* Step Progress */}
       <div className="flex items-center gap-2 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
@@ -172,7 +243,7 @@ export default function TracerStudyPage() {
           {/* Step 0: Data Kelulusan */}
           {currentStep === 0 && (
             <div className="space-y-5">
-              <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-slate-500 mb-4">
+              <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-4">
                 Data Kelulusan
               </p>
               <div className="space-y-2">
@@ -195,7 +266,7 @@ export default function TracerStudyPage() {
           {/* Step 1: Pendidikan */}
           {currentStep === 1 && (
             <div className="space-y-5">
-              <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-slate-500 mb-4">
+              <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-4">
                 Pendidikan Terakhir
               </p>
               <div className="space-y-2">
@@ -208,10 +279,9 @@ export default function TracerStudyPage() {
                   className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20"
                 >
                   <option value="">Pilih pendidikan terakhir</option>
-                  <option value="D3">D3</option>
-                  <option value="S1">S1</option>
-                  <option value="S2">S2</option>
-                  <option value="S3">S3</option>
+                  {EDUCATION_LEVELS.map(e => (
+                    <option key={e} value={e}>{e}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -220,7 +290,7 @@ export default function TracerStudyPage() {
           {/* Step 2: Pekerjaan */}
           {currentStep === 2 && (
             <div className="space-y-5">
-              <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-slate-500 mb-4">
+              <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-4">
                 Status Pekerjaan
               </p>
               <div className="space-y-2">
@@ -233,11 +303,9 @@ export default function TracerStudyPage() {
                   className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20"
                 >
                   <option value="">Pilih status</option>
-                  <option value="Bekerja">Bekerja</option>
-                  <option value="Belum Bekerja">Belum Bekerja</option>
-                  <option value="Wirausaha">Wirausaha</option>
-                  <option value="Melanjutkan Studi">Melanjutkan Studi</option>
-                  <option value="Tidak bekerja / Mencari pekerjaan">Tidak bekerja / Mencari pekerjaan</option>
+                  {EMPLOYMENT_STATUSES.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
                 </select>
               </div>
 
@@ -277,11 +345,9 @@ export default function TracerStudyPage() {
                       className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20"
                     >
                       <option value="">Pilih kisaran gaji</option>
-                      <option value="< 3 juta">&lt; Rp 3.000.000</option>
-                      <option value="3-5 juta">Rp 3.000.000 - Rp 5.000.000</option>
-                      <option value="5-10 juta">Rp 5.000.000 - Rp 10.000.000</option>
-                      <option value="10-20 juta">Rp 10.000.000 - Rp 20.000.000</option>
-                      <option value="> 20 juta">&gt; Rp 20.000.000</option>
+                      {SALARY_RANGES.map(s => (
+                        <option key={s.value} value={s.value}>{s.label}</option>
+                      ))}
                     </select>
                   </div>
                   <div className="space-y-2">
@@ -294,10 +360,9 @@ export default function TracerStudyPage() {
                       className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20"
                     >
                       <option value="">Pilih tingkat kesesuaian</option>
-                      <option value="Sangat Sesuai">Sangat Sesuai</option>
-                      <option value="Sesuai">Sesuai</option>
-                      <option value="Kurang Sesuai">Kurang Sesuai</option>
-                      <option value="Tidak Sesuai">Tidak Sesuai</option>
+                      {FIELD_MATCH_OPTIONS.map(o => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
                     </select>
                   </div>
                 </>
@@ -317,7 +382,7 @@ export default function TracerStudyPage() {
           {/* Step 3: Saran */}
           {currentStep === 3 && (
             <div className="space-y-5">
-              <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-slate-500 mb-4">
+              <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-4">
                 Kritik & Saran
               </p>
               <div className="space-y-2">
@@ -374,6 +439,15 @@ export default function TracerStudyPage() {
           )}
         </div>
       </form>
+    </div>
+  )
+}
+
+function SummaryItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400">{label}</p>
+      <p className="text-sm text-slate-800">{value}</p>
     </div>
   )
 }

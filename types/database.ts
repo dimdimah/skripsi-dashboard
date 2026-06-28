@@ -30,6 +30,7 @@ export interface TrackRecord {
   end_date: string | null
   description: string | null
   is_current: boolean
+  idempotency_key: string | null
   created_at: string
   updated_at: string
 }
@@ -57,6 +58,7 @@ export interface TracerStudyQuestion {
   options: string[] | null
   is_active: boolean
   display_order: number
+  angkatan: string | null
   created_at: string
   updated_at: string
 }
@@ -79,13 +81,14 @@ export interface Job {
   updated_at: string
 }
 
-// ─── Matching (Content-Based Filtering) ───
+// ─── Matching (Content-Based Filtering + Collaborative Filtering) ───
 export interface MatchBreakdown {
   skill: number | null
   location: number | null
   salary: number | null
   education: number | null
   type: number | null
+  cf: number | null  // Collaborative Filtering score (Jaccard-based)
 }
 
 export interface MatchResult {

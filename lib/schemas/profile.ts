@@ -17,7 +17,11 @@ export type ProfileFormData = z.infer<typeof profileSchema>
 
 export const changePasswordSchema = z.object({
   current_password: z.string().min(1, 'Password saat ini wajib diisi'),
-  new_password: z.string().min(6, 'Password baru minimal 6 karakter'),
+  new_password: z.string()
+    .min(8, 'Password minimal 8 karakter')
+    .regex(/[A-Z]/, 'Harus mengandung huruf kapital')
+    .regex(/[a-z]/, 'Harus mengandung huruf kecil')
+    .regex(/[0-9]/, 'Harus mengandung angka'),
   confirm_password: z.string().min(1, 'Konfirmasi password wajib diisi'),
 }).refine((data) => data.new_password === data.confirm_password, {
   message: 'Konfirmasi password tidak cocok',

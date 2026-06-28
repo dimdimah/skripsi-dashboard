@@ -3,36 +3,15 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
-
-function parseCSVLine(line: string): string[] {
-  const result: string[] = []
-  let current = ''
-  let inQuotes = false
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i]
-    if (char === '"') {
-      if (inQuotes && i + 1 < line.length && line[i + 1] === '"') {
-        current += '"'
-        i++
-      } else {
-        inQuotes = !inQuotes
-      }
-    } else if (char === ',' && !inQuotes) {
-      result.push(current.trim())
-      current = ''
-    } else {
-      current += char
-    }
-  }
-  result.push(current.trim())
-  return result
-}
+import { parseCSVLine } from '@/lib/csv-utils'
 
 const rowSchema = z.object({
-  email: z.string().email('Email tidak valid').endsWith('@amikomsolo.ac.id', 'Hanya email @amikomsolo.ac.id'),
-  password: z.string().min(6, 'Password minimal 6 karakter'),
+  email: z.string().email('Email tidak valid').refine(
+    (e) => e.toLowerCase().endsWith('@amikomsolo.ac.id'),
+    'Hanya email @amikomsolo.ac.id'
+  ),
+  password: z.string().min(8, 'Password minimal 8 karakter'),
   display_name: z.string().min(1, 'Nama wajib diisi'),
-  role: z.enum(['user', 'super_user']).default('user'),
   skills: z.string().nullable().optional(),
   location: z.string().nullable().optional(),
   education_level: z.string().nullable().optional(),
@@ -48,7 +27,23 @@ export interface BulkImportResult {
 }
 
 export async function bulkImportUsers(raw: string): Promise<BulkImportResult> {
-  const lines = raw.trim().split('\n').filter(Boolean)
+  const lines = raw
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '')
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l.length > 0)
+
+  if (lines.length > 0) {
+    const firstLine = lines[0]
+    if (/[\x00-\x08\x0E-\x1F]/.test(firstLine) || firstLine.startsWith('PK')) {
+      return {
+        total: 0, success: 0, failed: 0,
+        errors: [{ row: 0, message: 'Format file tidak didukung. Upload file .csv (kompatibel) atau gunakan upload Excel dari form.' }],
+      }
+    }
+  }
+
   if (lines.length < 2) {
     return { total: 0, success: 0, failed: 0, errors: [{ row: 0, message: 'Data kosong atau hanya header. Pastikan ada minimal 1 baris data.' }] }
   }
@@ -56,12 +51,10 @@ export async function bulkImportUsers(raw: string): Promise<BulkImportResult> {
   const adminSupabase = createAdminClient()
   const result: BulkImportResult = { total: 0, success: 0, failed: 0, errors: [] }
 
-  // Parse header
   const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase())
   const nameIdx = headers.findIndex(h => h === 'nama' || h === 'name' || h === 'display_name')
   const emailIdx = headers.findIndex(h => h === 'email')
   const passwordIdx = headers.findIndex(h => h === 'password' || h === 'pass')
-  const roleIdx = headers.findIndex(h => h === 'role' || h === 'roles')
   const skillsIdx = headers.findIndex(h => h === 'skills' || h === 'skill')
   const locationIdx = headers.findIndex(h => h === 'location' || h === 'lokasi')
   const educationIdx = headers.findIndex(h => h === 'education level' || h === 'education_level' || h === 'pendidikan')
@@ -71,78 +64,89 @@ export async function bulkImportUsers(raw: string): Promise<BulkImportResult> {
   if (emailIdx === -1 || passwordIdx === -1 || nameIdx === -1) {
     return {
       total: 0, success: 0, failed: 0,
-      errors: [{ row: 0, message: 'Header wajib: Nama, Email, Password. Opsional: Role, Skills, Location, Education Level, Expected Salary, Preferred Type' }],
+      errors: [{ row: 0, message: 'Header wajib: Nama, Email, Password. Opsional: Skills, Location, Education Level, Expected Salary, Preferred Type' }],
     }
   }
 
   const dataLines = lines.slice(1)
   result.total = dataLines.length
 
-  for (let i = 0; i < dataLines.length; i++) {
-    const line = dataLines[i]
-    const cols = parseCSVLine(line)
-    const rowNum = i + 2 // 1-indexed + header row
+  const CHUNK_SIZE = 5
 
-    const display_name = cols[nameIdx] || ''
-    const email = cols[emailIdx] || ''
-    const password = cols[passwordIdx] || ''
-    const role = roleIdx !== -1 ? (cols[roleIdx] || 'user') : 'user'
-    const skills = skillsIdx !== -1 ? (cols[skillsIdx] || null) : null
-    const location = locationIdx !== -1 ? (cols[locationIdx] || null) : null
-    const education_level = educationIdx !== -1 ? (cols[educationIdx] || null) : null
-    const expected_salary = salaryIdx !== -1 ? (cols[salaryIdx] || null) : null
-    const preferred_type = typeIdx !== -1 ? (cols[typeIdx] || null) : null
+  for (let chunkStart = 0; chunkStart < dataLines.length; chunkStart += CHUNK_SIZE) {
+    const chunk = dataLines.slice(chunkStart, chunkStart + CHUNK_SIZE)
+    const chunkResults = await Promise.allSettled(
+      chunk.map(async (line, i) => {
+        const rowNum = chunkStart + i + 2
+        const cols = parseCSVLine(line)
 
-    const parsed = rowSchema.safeParse({ email, password, display_name, role, skills, location, education_level, expected_salary, preferred_type })
-    if (!parsed.success) {
-      result.failed++
-      result.errors.push({ row: rowNum, message: parsed.error.issues.map(e => e.message).join(', ') })
-      continue
-    }
+        const display_name = cols[nameIdx] || ''
+        const email = cols[emailIdx] || ''
+        const password = cols[passwordIdx] || ''
+        const skills = skillsIdx !== -1 ? (cols[skillsIdx] || null) : null
+        const location = locationIdx !== -1 ? (cols[locationIdx] || null) : null
+        const education_level = educationIdx !== -1 ? (cols[educationIdx] || null) : null
+        const expected_salary = salaryIdx !== -1 ? (cols[salaryIdx] || null) : null
+        const preferred_type = typeIdx !== -1 ? (cols[typeIdx] || null) : null
 
-    try {
-      const { data: userData, error } = await adminSupabase.auth.admin.createUser({
-        email: parsed.data.email,
-        password: parsed.data.password,
-        email_confirm: true,
-        user_metadata: {
-          display_name: parsed.data.display_name,
-          role: parsed.data.role,
-        },
-      })
-
-      if (error) {
-        result.failed++
-        result.errors.push({ row: rowNum, message: error.message })
-      } else if (userData?.user) {
-        const skillsArray = parsed.data.skills
-          ? parsed.data.skills.split(/[,;]/).map(s => s.trim()).filter(Boolean)
-          : []
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: profileError } = await (adminSupabase
-          .from('profiles') as any)
-          .update({
-            full_name: parsed.data.display_name,
-            role: parsed.data.role,
-            skills: skillsArray,
-            location: parsed.data.location,
-            education_level: parsed.data.education_level,
-            expected_salary: parsed.data.expected_salary,
-            preferred_type: parsed.data.preferred_type,
-          })
-          .eq('id', userData.user.id)
-
-        if (profileError) {
-          result.success++
-          result.errors.push({ row: rowNum, message: `User dibuat tapi gagal update profil: ${profileError.message}` })
-        } else {
-          result.success++
+        const parsed = rowSchema.safeParse({ email, password, display_name, skills, location, education_level, expected_salary, preferred_type })
+        if (!parsed.success) {
+          return { success: false as const, rowNum, message: parsed.error.issues.map(e => e.message).join(', ') }
         }
+
+        const { data: userData, error } = await adminSupabase.auth.admin.createUser({
+          email: parsed.data.email,
+          password: parsed.data.password,
+          email_confirm: true,
+          user_metadata: {
+            display_name: parsed.data.display_name,
+          },
+        })
+
+        if (error) {
+          return { success: false as const, rowNum, message: error.message }
+        }
+
+        if (userData?.user) {
+          const skillsArray = parsed.data.skills
+            ? parsed.data.skills.split(/[,;]/).map(s => s.trim()).filter(Boolean)
+            : []
+
+          const { error: profileError } = await adminSupabase
+            .from('profiles')
+            .update({
+              full_name: parsed.data.display_name,
+              role: 'user',
+              skills: skillsArray,
+              location: parsed.data.location,
+              education_level: parsed.data.education_level,
+              expected_salary: parsed.data.expected_salary,
+              preferred_type: parsed.data.preferred_type,
+            } as never)
+            .eq('id', userData.user.id)
+
+          if (profileError) {
+            return { success: true as const, rowNum, message: `User dibuat tapi gagal update profil: ${profileError.message}` }
+          }
+        }
+
+        return { success: true as const, rowNum, message: '' }
+      })
+    )
+
+    for (const r of chunkResults) {
+      if (r.status === 'fulfilled') {
+        if (r.value.success) {
+          result.success++
+          if (r.value.message) result.errors.push({ row: r.value.rowNum, message: r.value.message })
+        } else {
+          result.failed++
+          result.errors.push({ row: r.value.rowNum, message: r.value.message })
+        }
+      } else {
+        result.failed++
+        result.errors.push({ row: 0, message: r.reason?.message || 'Unknown error' })
       }
-    } catch (err) {
-      result.failed++
-      result.errors.push({ row: rowNum, message: err instanceof Error ? err.message : 'Unknown error' })
     }
   }
 

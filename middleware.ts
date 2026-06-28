@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createMiddlewareClient } from '@/lib/supabase/middleware'
-import type { Profile } from '@/types/database'
 
 export async function middleware(request: NextRequest) {
   const { supabase, supabaseResponse } = await createMiddlewareClient(request)
@@ -21,26 +20,26 @@ export async function middleware(request: NextRequest) {
   }
 
   const isAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/sign-up')
-  if (user && isAuthRoute) {
+  const needsRoleCheck = isAuthRoute || pathname.startsWith('/super-user') || pathname.startsWith('/admin')
+
+  if (user && needsRoleCheck) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
-      .single() as { data: Profile | null }
+      .single()
 
-    const redirectTo = profile?.role === 'super_user' ? '/admin' : '/dashboard'
-    return NextResponse.redirect(new URL(redirectTo, request.url))
-  }
+    const role = (profile as { role: string } | null)?.role
 
-  if (user && (pathname.startsWith('/super-user') || pathname.startsWith('/admin'))) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single() as { data: Profile | null }
+    if (isAuthRoute) {
+      const redirectTo = role === 'super_user' ? '/admin' : '/dashboard'
+      return NextResponse.redirect(new URL(redirectTo, request.url))
+    }
 
-    if (profile?.role !== 'super_user') {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
+    if (pathname.startsWith('/super-user') || pathname.startsWith('/admin')) {
+      if (role !== 'super_user') {
+        return NextResponse.redirect(new URL('/dashboard', request.url))
+      }
     }
   }
 
@@ -49,6 +48,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|_next/data|api|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

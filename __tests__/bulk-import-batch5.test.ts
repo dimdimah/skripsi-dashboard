@@ -9,7 +9,8 @@ import { describe, it, expect, jest, beforeEach } from "@jest/globals"
 
 // ── Mocks ──
 
-const mockCreateUser = jest.fn()
+const mockCreateUser = jest.fn<() => Promise<{ data: { user: { id: string } } | null; error: { message: string } | null }>>()
+const mockFrom = jest.fn()
 
 jest.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
@@ -18,6 +19,7 @@ jest.mock("@/lib/supabase/admin", () => ({
         createUser: mockCreateUser,
       },
     },
+    from: mockFrom,
   }),
 }))
 
@@ -33,16 +35,22 @@ describe("Bulk Import — Kirim 5 Data Sekaligus ke DB", () => {
   beforeEach(() => {
     mockCreateUser.mockReset()
     mockCreateUser.mockResolvedValue({ data: { user: { id: "mock-id" } }, error: null })
+    mockFrom.mockReset()
+    mockFrom.mockReturnValue({
+      update: jest.fn().mockReturnValue({
+        eq: jest.fn().mockResolvedValue({ error: null }),
+      }),
+    })
   })
 
   it("should process exactly 5 valid records and send all to DB", async () => {
     const csv = [
       "Nama,Email,Password,Role",
-      "Andi Pratama,andi.pratama@amikomsurakarta.ac.id,password123,user",
-      "Siti Nurhaliza,siti.nurhaliza@amikomsurakarta.ac.id,password456,user",
-      "Budi Santoso,budi.santoso@amikomsurakarta.ac.id,password789,super_user",
-      "Dewi Lestari,dewi.lestari@amikomsurakarta.ac.id,password012,user",
-      "Rizky Hidayat,rizky.hidayat@amikomsurakarta.ac.id,password345,user",
+      "Andi Pratama,andi.pratama@amikomsolo.ac.id,password123,user",
+      "Siti Nurhaliza,siti.nurhaliza@amikomsolo.ac.id,password456,user",
+      "Budi Santoso,budi.santoso@amikomsolo.ac.id,password789,super_user",
+      "Dewi Lestari,dewi.lestari@amikomsolo.ac.id,password012,user",
+      "Rizky Hidayat,rizky.hidayat@amikomsolo.ac.id,password345,user",
     ].join("\n")
 
     const res = await bulkImportUsers(csv)
@@ -56,11 +64,11 @@ describe("Bulk Import — Kirim 5 Data Sekaligus ke DB", () => {
 
   it("should call createUser with correct data for each of 5 records", async () => {
     const records = [
-      { name: "Andi Pratama", email: "andi.pratama@amikomsurakarta.ac.id", password: "password123", role: "user" },
-      { name: "Siti Nurhaliza", email: "siti.nurhaliza@amikomsurakarta.ac.id", password: "password456", role: "user" },
-      { name: "Budi Santoso", email: "budi.santoso@amikomsurakarta.ac.id", password: "password789", role: "super_user" },
-      { name: "Dewi Lestari", email: "dewi.lestari@amikomsurakarta.ac.id", password: "password012", role: "user" },
-      { name: "Rizky Hidayat", email: "rizky.hidayat@amikomsurakarta.ac.id", password: "password345", role: "user" },
+      { name: "Andi Pratama", email: "andi.pratama@amikomsolo.ac.id", password: "password123", role: "user" },
+      { name: "Siti Nurhaliza", email: "siti.nurhaliza@amikomsolo.ac.id", password: "password456", role: "user" },
+      { name: "Budi Santoso", email: "budi.santoso@amikomsolo.ac.id", password: "password789", role: "super_user" },
+      { name: "Dewi Lestari", email: "dewi.lestari@amikomsolo.ac.id", password: "password012", role: "user" },
+      { name: "Rizky Hidayat", email: "rizky.hidayat@amikomsolo.ac.id", password: "password345", role: "user" },
     ]
 
     const csv = [
@@ -86,11 +94,11 @@ describe("Bulk Import — Kirim 5 Data Sekaligus ke DB", () => {
   it("should handle 5 records with mixed valid and invalid data", async () => {
     const csv = [
       "Nama,Email,Password,Role",
-      "User Satu,user1@amikomsurakarta.ac.id,password123,user",
-      ",user2@amikomsurakarta.ac.id,password456,user",
+      "User Satu,user1@amikomsolo.ac.id,password123,user",
+      ",user2@amikomsolo.ac.id,password456,user",
       "User Tiga,bukan-email,password789,user",
-      "User Empat,user4@amikomsurakarta.ac.id,12345,user",
-      "User Lima,user5@amikomsurakarta.ac.id,password345,user",
+      "User Empat,user4@amikomsolo.ac.id,12345,user",
+      "User Lima,user5@amikomsolo.ac.id,password345,user",
     ].join("\n")
 
     const res = await bulkImportUsers(csv)
@@ -107,7 +115,7 @@ describe("Bulk Import — Kirim 5 Data Sekaligus ke DB", () => {
     expect(res.errors[1].message).toContain("Email tidak valid")
 
     expect(res.errors[2].row).toBe(5)
-    expect(res.errors[2].message).toContain("Password minimal 6 karakter")
+    expect(res.errors[2].message).toContain("Password minimal")
 
     expect(mockCreateUser).toHaveBeenCalledTimes(2)
   })
@@ -141,11 +149,11 @@ describe("Bulk Import — Kirim 5 Data Sekaligus ke DB", () => {
 
     const csv = [
       "Nama,Email,Password,Role",
-      "User1,user1@amikomsurakarta.ac.id,password123,user",
-      "User2,user2@amikomsurakarta.ac.id,password456,user",
-      "User3,user3@amikomsurakarta.ac.id,password789,user",
-      "User4,user4@amikomsurakarta.ac.id,password012,user",
-      "User5,user5@amikomsurakarta.ac.id,password345,user",
+      "User1,user1@amikomsolo.ac.id,password123,user",
+      "User2,user2@amikomsolo.ac.id,password456,user",
+      "User3,user3@amikomsolo.ac.id,password789,user",
+      "User4,user4@amikomsolo.ac.id,password012,user",
+      "User5,user5@amikomsolo.ac.id,password345,user",
     ].join("\n")
 
     const res = await bulkImportUsers(csv)
@@ -171,11 +179,11 @@ describe("Bulk Import — Kirim 5 Data Sekaligus ke DB", () => {
 
     const csv = [
       "Nama,Email,Password,Role",
-      "User1,user1@amikomsurakarta.ac.id,password123,user",
-      "User2,user2@amikomsurakarta.ac.id,password456,user",
-      "User3,user3@amikomsurakarta.ac.id,password789,user",
-      "User4,user4@amikomsurakarta.ac.id,password012,user",
-      "User5,user5@amikomsurakarta.ac.id,password345,user",
+      "User1,user1@amikomsolo.ac.id,password123,user",
+      "User2,user2@amikomsolo.ac.id,password456,user",
+      "User3,user3@amikomsolo.ac.id,password789,user",
+      "User4,user4@amikomsolo.ac.id,password012,user",
+      "User5,user5@amikomsolo.ac.id,password345,user",
     ].join("\n")
 
     await bulkImportUsers(csv)
@@ -186,11 +194,11 @@ describe("Bulk Import — Kirim 5 Data Sekaligus ke DB", () => {
   it("should handle 5 records with various role combinations", async () => {
     const csv = [
       "Nama,Email,Password,Role",
-      "User1,user1@amikomsurakarta.ac.id,password123,user",
-      "User2,user2@amikomsurakarta.ac.id,password456,super_user",
-      "User3,user3@amikomsurakarta.ac.id,password789,user",
-      "User4,user4@amikomsurakarta.ac.id,password012,super_user",
-      "User5,user5@amikomsurakarta.ac.id,password345,user",
+      "User1,user1@amikomsolo.ac.id,password123,user",
+      "User2,user2@amikomsolo.ac.id,password456,super_user",
+      "User3,user3@amikomsolo.ac.id,password789,user",
+      "User4,user4@amikomsolo.ac.id,password012,super_user",
+      "User5,user5@amikomsolo.ac.id,password345,user",
     ].join("\n")
 
     const res = await bulkImportUsers(csv)
@@ -208,11 +216,11 @@ describe("Bulk Import — Kirim 5 Data Sekaligus ke DB", () => {
   it("should handle 5 records without Role column (all default to user)", async () => {
     const csv = [
       "Nama,Email,Password",
-      "User1,user1@amikomsurakarta.ac.id,password123",
-      "User2,user2@amikomsurakarta.ac.id,password456",
-      "User3,user3@amikomsurakarta.ac.id,password789",
-      "User4,user4@amikomsurakarta.ac.id,password012",
-      "User5,user5@amikomsurakarta.ac.id,password345",
+      "User1,user1@amikomsolo.ac.id,password123",
+      "User2,user2@amikomsolo.ac.id,password456",
+      "User3,user3@amikomsolo.ac.id,password789",
+      "User4,user4@amikomsolo.ac.id,password012",
+      "User5,user5@amikomsolo.ac.id,password345",
     ].join("\n")
 
     const res = await bulkImportUsers(csv)
@@ -227,11 +235,11 @@ describe("Bulk Import — Kirim 5 Data Sekaligus ke DB", () => {
   it("should handle 5 records with quoted CSV fields", async () => {
     const csv = [
       "Nama,Email,Password,Role",
-      '"Pratama, Andi",andi@amikomsurakarta.ac.id,password123,user',
-      '"Nurhaliza, Siti",siti@amikomsurakarta.ac.id,password456,user',
-      '"Santoso, Budi",budi@amikomsurakarta.ac.id,password789,user',
-      '"Lestari, Dewi",dewi@amikomsurakarta.ac.id,password012,user',
-      '"Hidayat, Rizky",rizky@amikomsurakarta.ac.id,password345,user',
+      '"Pratama, Andi",andi@amikomsolo.ac.id,password123,user',
+      '"Nurhaliza, Siti",siti@amikomsolo.ac.id,password456,user',
+      '"Santoso, Budi",budi@amikomsolo.ac.id,password789,user',
+      '"Lestari, Dewi",dewi@amikomsolo.ac.id,password012,user',
+      '"Hidayat, Rizky",rizky@amikomsolo.ac.id,password345,user',
     ].join("\n")
 
     const res = await bulkImportUsers(csv)

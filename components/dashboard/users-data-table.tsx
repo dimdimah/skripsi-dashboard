@@ -2,9 +2,19 @@
 
 import { Badge } from '@/components/ui/badge'
 import { MoreVertical } from 'lucide-react'
+import { Pagination } from '@/components/ui/pagination'
 import type { Profile } from '@/types/database'
 
-export function UsersDataTable({ users }: { users: Profile[] }) {
+interface UsersDataTableProps {
+  users: Profile[]
+  currentPage?: number
+  totalPages?: number
+  onPageChange?: (page: number) => void
+}
+
+export function UsersDataTable({ users, currentPage = 1, totalPages = 1, onPageChange }: UsersDataTableProps) {
+  const hasPagination = totalPages > 1 && onPageChange
+
   return (
     <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
       <div className="overflow-x-auto">
@@ -55,7 +65,10 @@ export function UsersDataTable({ users }: { users: Profile[] }) {
                     </p>
                   </td>
                   <td className="px-6 py-4 text-center">
-                    <button className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white hover:text-slate-600">
+                    <button
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white hover:text-slate-600"
+                      aria-label={`Aksi untuk ${user.email}`}
+                    >
                       <MoreVertical className="h-4 w-4" />
                     </button>
                   </td>
@@ -74,6 +87,9 @@ export function UsersDataTable({ users }: { users: Profile[] }) {
           </tbody>
         </table>
       </div>
+      {hasPagination && (
+        <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={onPageChange} />
+      )}
     </div>
   )
 }

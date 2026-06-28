@@ -1,6 +1,7 @@
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import AddUserForm from '@/components/admin/add-user-form'
+import { PageHeader } from '@/components/ui/page-header'
 
 export default function AdminAddUserPage() {
   return (
@@ -13,18 +14,12 @@ export default function AdminAddUserPage() {
           <ArrowLeft className="h-4 w-4" />
           Kembali ke Dashboard
         </Link>
-        <div className="flex items-center gap-2">
-          <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-amikom-purple text-amikom-jonquil-warm text-[10px]">+</span>
-          <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-slate-500">
-            Tambah User
-          </p>
-        </div>
-        <h1 className="font-sans text-3xl md:text-4xl font-semibold tracking-[-0.03em] text-slate-900 leading-[1.1]">
-          Tambah User Baru.
-        </h1>
-        <p className="text-slate-600">
-          Buat akun user baru secara manual.
-        </p>
+        <PageHeader
+          icon={<span className="text-[11px]">+</span>}
+          label="Tambah User"
+          title="Tambah User Baru."
+          subtitle="Buat akun user baru secara manual."
+        />
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm animate-fade-in-up" style={{ animationDelay: '0.05s' }}>

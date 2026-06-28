@@ -1,10 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
 import { z } from 'zod'
-import type { TracerStudyResponse } from '@/types/database'
+import { createClient } from '@/lib/supabase/server'
+import { withAuth, orThrow } from './helpers'
 
 const questionSchema = z.object({
   question_text: z.string().min(1, 'Teks pertanyaan wajib diisi'),
@@ -16,9 +15,7 @@ const questionSchema = z.object({
 })
 
 export async function createQuestion(formData: FormData) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  const { supabase, user } = await withAuth()
 
   const raw = {
     question_text: formData.get('question_text') as string,
@@ -38,20 +35,23 @@ export async function createQuestion(formData: FormData) {
     ? parsed.data.options.split('\n').map(s => s.trim()).filter(Boolean)
     : null
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase.from('tracer_study_questions') as any).insert({
-    ...parsed.data,
-    options: optionsArray,
-  })
+  const { error } = await supabase
+    .from('tracer_study_questions')
+    .insert({
+      question_text: parsed.data.question_text,
+      question_type: parsed.data.question_type,
+      options: optionsArray,
+      is_active: parsed.data.is_active,
+      display_order: parsed.data.display_order,
+      angkatan: parsed.data.angkatan,
+    } as never)
 
-  if (error) throw new Error(error.message)
+  orThrow(error, 'Gagal buat pertanyaan', 'Gagal menyimpan pertanyaan. Silakan coba lagi.')
   revalidatePath('/admin/kuesioner')
 }
 
 export async function updateQuestion(id: string, formData: FormData) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  const { supabase, user } = await withAuth()
 
   const raw = {
     question_text: formData.get('question_text') as string,
@@ -71,71 +71,85 @@ export async function updateQuestion(id: string, formData: FormData) {
     ? parsed.data.options.split('\n').map(s => s.trim()).filter(Boolean)
     : null
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase.from('tracer_study_questions') as any)
+  const { error } = await supabase
+    .from('tracer_study_questions')
     .update({
-      ...parsed.data,
+      question_text: parsed.data.question_text,
+      question_type: parsed.data.question_type,
       options: optionsArray,
-    })
+      is_active: parsed.data.is_active,
+      display_order: parsed.data.display_order,
+      angkatan: parsed.data.angkatan,
+    } as never)
     .eq('id', id)
 
-  if (error) throw new Error(error.message)
+  orThrow(error, 'Gagal update pertanyaan', 'Gagal menyimpan pertanyaan. Silakan coba lagi.')
   revalidatePath('/admin/kuesioner')
 }
 
 export async function deleteQuestion(id: string) {
-  const supabase = await createClient()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase.from('tracer_study_questions') as any).delete().eq('id', id)
-  if (error) throw new Error(error.message)
+  const { supabase } = await withAuth()
+  const { error } = await supabase
+    .from('tracer_study_questions')
+    .delete()
+    .eq('id', id)
+  orThrow(error, 'Gagal hapus pertanyaan', 'Gagal menghapus pertanyaan. Silakan coba lagi.')
   revalidatePath('/admin/kuesioner')
 }
 
-/**
- * Get distinct angkatan years that have questions.
- * Returns sorted array of year strings.
- */
 export async function getQuestionAngkatanList(): Promise<string[]> {
   const supabase = await createClient()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data } = await (supabase.from('tracer_study_questions') as any)
+  const { data } = await supabase
+    .from('tracer_study_questions')
     .select('angkatan')
     .order('angkatan', { ascending: false })
 
   if (!data || data.length === 0) return []
 
-  const typed = data as { angkatan: string }[]
-  const unique = [...new Set(typed.map(d => d.angkatan))]
-  return unique.filter((a): a is string => Boolean(a)).sort((a, b) => b.localeCompare(a))
+  const unique = [...new Set(data.map((d: { angkatan: string }) => d.angkatan))]
+  return (unique.filter((a): a is string => Boolean(a)) as string[]).sort((a, b) => b.localeCompare(a))
 }
 
-/**
- * Get all questions for a specific angkatan.
- */
 export async function getQuestionsByAngkatan(angkatan: string) {
   const supabase = await createClient()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data } = await (supabase.from('tracer_study_questions') as any)
-    .select('*')
+  const { data } = await supabase
+    .from('tracer_study_questions')
+    .select('id, question_text, question_type, options, is_active, display_order, angkatan')
     .eq('angkatan', angkatan)
     .order('display_order', { ascending: true })
 
   return data || []
 }
 
-/**
- * Get questions count per angkatan for the card overview.
- */
+export async function getQuestionsByAngkatanPaginated(angkatan: string, page: number, perPage: number = 20) {
+  const supabase = await createClient()
+  const from = (page - 1) * perPage
+  const to = from + perPage - 1
+
+  const { data, count } = await supabase
+    .from('tracer_study_questions')
+    .select('id, question_text, question_type, options, is_active, display_order, angkatan', { count: 'exact' })
+    .eq('angkatan', angkatan)
+    .order('display_order', { ascending: true })
+    .range(from, to)
+
+  return {
+    questions: data || [],
+    total: count || 0,
+    totalPages: Math.ceil((count || 0) / perPage),
+  }
+}
+
 export async function getQuestionsPerAngkatan(): Promise<{ angkatan: string; count: number; active: number }[]> {
   const supabase = await createClient()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data } = await (supabase.from('tracer_study_questions') as any)
+  const { data } = await supabase
+    .from('tracer_study_questions')
     .select('angkatan, is_active')
 
   if (!data || data.length === 0) return []
 
   const map: Record<string, { count: number; active: number }> = {}
-  for (const row of data as { angkatan: string; is_active: boolean }[]) {
+  for (const row of (data as { angkatan: string; is_active: boolean }[])) {
     if (!map[row.angkatan]) {
       map[row.angkatan] = { count: 0, active: 0 }
     }
@@ -148,14 +162,32 @@ export async function getQuestionsPerAngkatan(): Promise<{ angkatan: string; cou
     .sort((a, b) => b.angkatan.localeCompare(a.angkatan))
 }
 
-export async function getTracerStudyStats() {
+export async function getAvailableYears(): Promise<string[]> {
   const supabase = await createClient()
-
-  const { data: responses } = await supabase
+  const { data } = await supabase
     .from('tracer_study_responses')
-    .select('*')
+    .select('graduation_year')
+    .order('graduation_year', { ascending: false })
 
-  if (!responses) {
+  if (!data || data.length === 0) return []
+
+  const rows = (data as { graduation_year: number }[])
+  const years = rows.map(r => String(r.graduation_year))
+  return [...new Set(years)].sort((a, b) => b.localeCompare(a))
+}
+
+export async function getTracerStudyStats(year?: string) {
+  const supabase = await createClient()
+  let query = supabase
+    .from('tracer_study_responses')
+    .select('employment_status, salary_range, study_field_match, graduation_year')
+  if (year) {
+    query = query.eq('graduation_year', Number(year))
+  }
+
+  const { data: responses } = await query
+
+  if (!responses || responses.length === 0) {
     return {
       totalResponses: 0,
       employmentRate: 0,
@@ -165,21 +197,24 @@ export async function getTracerStudyStats() {
     }
   }
 
-  const rData = responses as unknown as TracerStudyResponse[]
-  const employed = rData.filter(r => r.employment_status === 'Bekerja').length
-  const studying = rData.filter(r => r.employment_status === 'Melanjutkan Studi').length
-  const fieldMatch = rData.filter(r => r.study_field_match === 'Sangat Sesuai' || r.study_field_match === 'Sesuai').length
+  type TracerStudyRow = { employment_status: string; salary_range: string | null; study_field_match: string | null; graduation_year: number }
+  const rows = (responses as TracerStudyRow[])
+
+  const employed = rows.filter(r => r.employment_status === 'Bekerja').length
+  const studying = rows.filter(r => r.employment_status === 'Melanjutkan Studi').length
+  const withFieldMatch = rows.filter(r => r.study_field_match !== null)
+  const fieldMatch = withFieldMatch.filter(r => r.study_field_match === 'Sangat Sesuai' || r.study_field_match === 'Sesuai').length
 
   return {
-    totalResponses: rData.length,
-    employmentRate: rData.length > 0 ? Math.round((employed / rData.length) * 100) : 0,
-    studyingRate: rData.length > 0 ? Math.round((studying / rData.length) * 100) : 0,
-    salaryDistribution: rData.reduce((acc: Record<string, number>, r) => {
+    totalResponses: rows.length,
+    employmentRate: rows.length > 0 ? Math.round((employed / rows.length) * 100) : 0,
+    studyingRate: rows.length > 0 ? Math.round((studying / rows.length) * 100) : 0,
+    salaryDistribution: rows.reduce((acc: Record<string, number>, r) => {
       if (r.salary_range) {
         acc[r.salary_range] = (acc[r.salary_range] || 0) + 1
       }
       return acc
     }, {}),
-    fieldMatchRate: rData.length > 0 ? Math.round((fieldMatch / rData.length) * 100) : 0,
+    fieldMatchRate: withFieldMatch.length > 0 ? Math.round((fieldMatch / withFieldMatch.length) * 100) : 0,
   }
 }

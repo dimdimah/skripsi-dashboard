@@ -1,12 +1,9 @@
 'use client'
 
-import * as XLSX from 'xlsx'
-
 const HEADERS = [
   'Nama',
   'Email',
   'Password',
-  'Role',
   'Skills',
   'Location',
   'Education Level',
@@ -15,30 +12,57 @@ const HEADERS = [
 ]
 
 const SAMPLE_DATA = [
-  ['Budi Santoso', 'budi@amikomsolo.ac.id', 'rahasia123', 'user', 'JavaScript; React; Node.js', 'Yogyakarta', 'S1', '5-8 juta', 'Full-time'],
-  ['Siti Aminah', 'siti@amikomsolo.ac.id', 'amikom456', 'user', 'Python; Machine Learning', 'Jakarta', 'S2', '8-12 juta', 'Full-time'],
-  ['Ahmad Fauzi', 'ahmad@amikomsolo.ac.id', 'fauzi789', 'user', 'Java; Spring Boot', 'Surakarta', 'S1', '4-7 juta', 'Contract'],
-  ['Dewi Lestari', 'dewi@amikomsolo.ac.id', 'lestari321', 'user', 'Figma; Adobe XD; CSS', 'Remote', 'S1', '5-8 juta', 'Part-time'],
-  ['Rudi Hartono', 'rudi@amikomsolo.ac.id', 'hartono654', 'user', 'SQL; PostgreSQL; Excel', 'Yogyakarta', 'D3', '3-5 juta', 'Internship'],
-  ['Admin Utama', 'admin@amikomsolo.ac.id', 'admin987', 'super_user', '', '', '', '', ''],
+  ['Budi Santoso', 'budi@amikomsolo.ac.id', 'Rahasia123', 'JavaScript; React; Node.js', 'Yogyakarta', 'S1', '5-8 juta', 'Full-time'],
+  ['Siti Aminah', 'siti@amikomsolo.ac.id', 'Amikom456', 'Python; Machine Learning', 'Jakarta', 'S2', '8-12 juta', 'Full-time'],
+  ['Ahmad Fauzi', 'ahmad@amikomsolo.ac.id', 'Fauzi789', 'Java; Spring Boot', 'Surakarta', 'S1', '4-7 juta', 'Contract'],
+  ['Dewi Lestari', 'dewi@amikomsolo.ac.id', 'Lestari321', 'Figma; Adobe XD; CSS', 'Remote', 'S1', '5-8 juta', 'Part-time'],
+  ['Rudi Hartono', 'rudi@amikomsolo.ac.id', 'Hartono654', 'SQL; PostgreSQL; Excel', 'Yogyakarta', 'D3', '3-5 juta', 'Internship'],
 ]
 
-export function generateExcelBlob(): Blob {
+export async function generateExcelBlob(): Promise<Blob> {
+  const XLSX = await import('xlsx-js-style')
+
   const wb = XLSX.utils.book_new()
   const wsData = [HEADERS, ...SAMPLE_DATA]
   const ws = XLSX.utils.aoa_to_sheet(wsData)
 
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:H1')
+  for (let R = range.s.r; R <= range.e.r; R++) {
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const cellRef = XLSX.utils.encode_cell({ r: R, c: C })
+      if (!ws[cellRef]) continue
+      const cell = ws[cellRef] as any
+      if (R === 0) {
+        cell.s = {
+          fill: { patternType: 'solid', fgColor: { rgb: 'FF7E22CE' } },
+          font: { color: { rgb: 'FFFFFFFF' }, bold: true },
+          alignment: { horizontal: 'center', vertical: 'center', wrapText: 1 },
+          border: {
+            top: { style: 'thin', color: { rgb: 'FF000000' } },
+            bottom: { style: 'thin', color: { rgb: 'FF000000' } },
+            left: { style: 'thin', color: { rgb: 'FF000000' } },
+            right: { style: 'thin', color: { rgb: 'FF000000' } },
+          },
+        }
+      } else {
+        cell.s = {
+          alignment: { vertical: 'center', wrapText: 1 },
+          border: {
+            top: { style: 'thin', color: { rgb: 'FF000000' } },
+            bottom: { style: 'thin', color: { rgb: 'FF000000' } },
+            left: { style: 'thin', color: { rgb: 'FF000000' } },
+            right: { style: 'thin', color: { rgb: 'FF000000' } },
+          },
+        }
+      }
+    }
+  }
+
   ws['!cols'] = [
-    { wch: 20 },
-    { wch: 30 },
-    { wch: 15 },
-    { wch: 12 },
-    { wch: 35 },
-    { wch: 15 },
-    { wch: 15 },
-    { wch: 15 },
-    { wch: 15 },
+    { wch: 20 }, { wch: 35 }, { wch: 20 }, { wch: 40 },
+    { wch: 20 }, { wch: 15 }, { wch: 20 }, { wch: 20 }
   ]
+  ws['!freeze'] = { xSplit: 0, ySplit: 1, topLeftCell: 'A2' }
 
   XLSX.utils.book_append_sheet(wb, ws, 'Template Import')
 
@@ -46,7 +70,9 @@ export function generateExcelBlob(): Blob {
   return new Blob([xlsxBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
 }
 
-export function excelFileToCSV(file: File): Promise<string> {
+export async function excelFileToCSV(file: File): Promise<string> {
+  const XLSX = await import('xlsx')
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = (e) => {
@@ -65,9 +91,95 @@ export function excelFileToCSV(file: File): Promise<string> {
   })
 }
 
+export async function exportPreviewToExcel(data: Array<{
+  email: string
+  name: string
+  password: string
+  skills: string
+  location: string
+  valid: boolean
+}>): Promise<void> {
+  const XLSX = await import('xlsx-js-style')
+
+  const wsData = [
+    ['Nama', 'Email', 'Password', 'Skills', 'Location', 'Status'],
+    ...data.map(d => [
+      d.name, d.email, d.password, d.skills, d.location,
+      d.valid ? 'Valid' : 'Invalid'
+    ])
+  ]
+
+  const wb = XLSX.utils.book_new()
+  const ws = XLSX.utils.aoa_to_sheet(wsData)
+
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:F1')
+  for (let R = range.s.r; R <= range.e.r; R++) {
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const cellRef = XLSX.utils.encode_cell({ r: R, c: C })
+      if (!ws[cellRef]) continue
+      const cell = ws[cellRef] as any
+      if (R === 0) {
+        cell.s = {
+          fill: { patternType: 'solid', fgColor: { rgb: 'FF7E22CE' } },
+          font: { color: { rgb: 'FFFFFFFF' }, bold: true },
+          alignment: { horizontal: 'center', vertical: 'center', wrapText: 1 },
+          border: {
+            top: { style: 'thin', color: { rgb: 'FF000000' } },
+            bottom: { style: 'thin', color: { rgb: 'FF000000' } },
+            left: { style: 'thin', color: { rgb: 'FF000000' } },
+            right: { style: 'thin', color: { rgb: 'FF000000' } },
+          },
+        }
+      } else {
+        const rowData = data[R - 1]
+        cell.s = {
+          fill: rowData?.valid ? { patternType: 'solid', fgColor: { rgb: 'FFDCFCE7' } } : { patternType: 'solid', fgColor: { rgb: 'FFFEE2E2' } },
+          alignment: { vertical: 'center', wrapText: 1 },
+          border: {
+            top: { style: 'thin', color: { rgb: 'FF000000' } },
+            bottom: { style: 'thin', color: { rgb: 'FF000000' } },
+            left: { style: 'thin', color: { rgb: 'FF000000' } },
+            right: { style: 'thin', color: { rgb: 'FF000000' } },
+          },
+        }
+      }
+    }
+  }
+
+  ws['!cols'] = [
+    { wch: 20 }, { wch: 35 }, { wch: 20 }, { wch: 40 }, { wch: 20 }, { wch: 10 }
+  ]
+  ws['!freeze'] = { xSplit: 0, ySplit: 1, topLeftCell: 'A2' }
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Hasil Import')
+
+  const statsWs = XLSX.utils.aoa_to_sheet([
+    ['Statistik', ''],
+    ['Total', data.length],
+    ['Valid', data.filter(d => d.valid).length],
+    ['Invalid', data.filter(d => !d.valid).length],
+  ])
+  statsWs['!cols'] = [{ wch: 15 }, { wch: 10 }]
+  XLSX.utils.book_append_sheet(wb, statsWs, 'Statistik')
+
+  const xlsxBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+  const blob = new Blob([xlsxBuffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  })
+
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `hasil-import-${new Date().toISOString().split('T')[0]}.xlsx`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
 export default function DownloadTemplateButton() {
-  function handleDownload() {
-    const blob = generateExcelBlob()
+  async function handleDownload() {
+    const blob = await generateExcelBlob()
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.setAttribute('href', url)

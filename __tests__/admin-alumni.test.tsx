@@ -20,11 +20,11 @@ interface Alumni {
 }
 
 const mockAlumni: Alumni[] = [
-  { id: "1", nim: "A123", full_name: "Budi Santoso", email: "a123@amikomsurakarta.ac.id", graduation_year: "2024", phone: "08123456789" },
-  { id: "2", nim: "A456", full_name: "Siti Rahmawati", email: "a456@amikomsurakarta.ac.id", graduation_year: "2023", phone: "08123456780" },
-  { id: "3", nim: "B789", full_name: "Ahmad Syarif", email: "b789@amikomsurakarta.ac.id", graduation_year: "2024", phone: "08123456781" },
-  { id: "4", nim: "B012", full_name: "Dewi Sartika", email: "b012@amikomsurakarta.ac.id", graduation_year: "2022", phone: "08123456782" },
-  { id: "5", nim: "C345", full_name: "Budi Prasetyo", email: "c345@amikomsurakarta.ac.id", graduation_year: "2024", phone: "08123456783" },
+  { id: "1", nim: "A123", full_name: "Budi Santoso", email: "a123@amikomsolo.ac.id", graduation_year: "2024", phone: "08123456789" },
+  { id: "2", nim: "A456", full_name: "Siti Rahmawati", email: "a456@amikomsolo.ac.id", graduation_year: "2023", phone: "08123456780" },
+  { id: "3", nim: "B789", full_name: "Ahmad Syarif", email: "b789@amikomsolo.ac.id", graduation_year: "2024", phone: "08123456781" },
+  { id: "4", nim: "B012", full_name: "Dewi Sartika", email: "b012@amikomsolo.ac.id", graduation_year: "2022", phone: "08123456782" },
+  { id: "5", nim: "C345", full_name: "Budi Prasetyo", email: "c345@amikomsolo.ac.id", graduation_year: "2024", phone: "08123456783" },
 ]
 
 // ──────────────────────────────────────────

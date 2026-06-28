@@ -1,14 +1,12 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
 import { tracerStudySchema } from '@/lib/schemas/tracer-study'
+import { createClient } from '@/lib/supabase/server'
+import { withAuth, orThrow } from './helpers'
 
 export async function submitTracerStudy(formData: FormData) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  const { supabase, user } = await withAuth()
 
   const raw = {
     graduation_year: Number(formData.get('graduation_year')),
@@ -26,16 +24,24 @@ export async function submitTracerStudy(formData: FormData) {
     throw new Error(parsed.error.issues.map(e => e.message).join(', '))
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase.from('tracer_study_responses') as any).upsert(
-    {
-      ...parsed.data,
-      user_id: user.id,
-    },
-    { onConflict: 'user_id' }
-  )
+  const { error } = await supabase
+    .from('tracer_study_responses')
+    .upsert(
+      {
+        graduation_year: parsed.data.graduation_year,
+        education_level: parsed.data.education_level,
+        employment_status: parsed.data.employment_status,
+        company: parsed.data.company,
+        position: parsed.data.position,
+        salary_range: parsed.data.salary_range,
+        study_field_match: parsed.data.study_field_match,
+        suggestions: parsed.data.suggestions,
+        user_id: user.id,
+      } as never,
+      { onConflict: 'user_id' }
+    )
 
-  if (error) throw new Error(error.message)
+  orThrow(error, 'Gagal submit tracer study', 'Gagal menyimpan data tracer study. Silakan coba lagi.')
 
   revalidatePath('/dashboard/tracer-study')
 }
@@ -51,6 +57,10 @@ export async function getTracerStudyResponse() {
     .eq('user_id', user.id)
     .maybeSingle()
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    console.error('Gagal ambil tracer study:', error.message)
+    return null
+  }
+
   return data
 }

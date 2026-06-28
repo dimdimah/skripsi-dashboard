@@ -9,8 +9,8 @@ export const jobSchema = z.object({
   description: z.string().min(1, 'Deskripsi wajib diisi'),
   skills: z.string().nullable().optional(),
   contact_info: z.string().nullable().optional(),
-  url: z.string().url('URL harus valid').min(1, 'URL pendaftaran wajib diisi'),
-  source: z.string().min(1, 'Sumber data wajib diisi'),
+  url: z.string().url('URL harus valid').or(z.literal('')).default(''),
+  source: z.string().default('Internal'),
   is_active: z.boolean().default(true),
 })
 

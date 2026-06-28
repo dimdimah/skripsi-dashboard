@@ -7,6 +7,7 @@ export const trackRecordSchema = z.object({
   end_date: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
   is_current: z.boolean().default(false),
+  idempotency_key: z.string().nullable().optional(),
 })
 
 export type TrackRecordFormData = z.infer<typeof trackRecordSchema>

@@ -4,8 +4,20 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { createJob, updateJob, deleteJob, toggleJobStatus } from '@/lib/actions/jobs'
 import { Badge } from '@/components/ui/badge'
+import { Modal } from '@/components/ui/modal'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import type { Job } from '@/types/database'
-import { Toaster, toast } from 'sonner'
+import { PageHeader } from '@/components/ui/page-header'
+import { toast } from 'sonner'
 
 const emptyForm: {
   title: string
@@ -16,6 +28,8 @@ const emptyForm: {
   description: string
   skills: string
   contact_info: string
+  url: string
+  source: string
   is_active: boolean
 } = {
   title: '',
@@ -26,6 +40,8 @@ const emptyForm: {
   description: '',
   skills: '',
   contact_info: '',
+  url: '',
+  source: '',
   is_active: true,
 }
 
@@ -36,6 +52,7 @@ export default function AdminCareerCenterPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState(emptyForm)
   const [submitting, setSubmitting] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
 
   useEffect(() => { loadJobs() }, [])
 
@@ -67,6 +84,8 @@ export default function AdminCareerCenterPage() {
       description: job.description,
       skills: (job.skills || []).join(', '),
       contact_info: job.contact_info || '',
+      url: job.url || '',
+      source: job.source || '',
       is_active: job.is_active,
     })
     setEditingId(job.id)
@@ -86,6 +105,8 @@ export default function AdminCareerCenterPage() {
       fd.append('description', form.description)
       fd.append('skills', form.skills)
       fd.append('contact_info', form.contact_info)
+      fd.append('url', form.url)
+      fd.append('source', form.source)
       fd.append('is_active', form.is_active ? 'true' : 'false')
 
       if (editingId) {
@@ -115,39 +136,38 @@ export default function AdminCareerCenterPage() {
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('Yakin ingin menghapus lowongan ini?')) return
-    try {
-      await deleteJob(id)
-      toast.success('Lowongan berhasil dihapus')
-      loadJobs()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Terjadi kesalahan')
-    }
+  function confirmDelete(id: string) {
+    setDeleteConfirm(id)
+  }
+
+  async function handleDelete() {
+    if (!deleteConfirm) return
+    const promise = deleteJob(deleteConfirm)
+    toast.promise(promise, {
+      loading: 'Menghapus lowongan...',
+      success: () => {
+        setDeleteConfirm(null)
+        loadJobs()
+        return 'Lowongan berhasil dihapus'
+      },
+      error: (err) => err instanceof Error ? err.message : 'Terjadi kesalahan',
+    })
   }
 
   return (
     <div className="space-y-8">
-      <Toaster position="top-center" />
-      {/* Header */}
-      <div className="space-y-1.5 animate-fade-in-up">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-amikom-purple text-amikom-jonquil-warm text-[10px]">💼</span>
-          <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-slate-500">Career Center</p>
-        </div>
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="font-sans text-3xl md:text-4xl font-semibold tracking-[-0.03em] text-slate-900 leading-[1.1]">
-              Kelola Lowongan.
-            </h1>
-            <p className="text-slate-600">Publikasikan dan kelola lowongan kerja untuk alumni.</p>
-          </div>
+      <PageHeader
+        icon={<span className="text-[11px]">💼</span>}
+        label="Career Center"
+        title="Kelola Lowongan."
+        subtitle="Publikasikan dan kelola lowongan kerja untuk alumni."
+        action={
           <button onClick={openAdd}
             className="rounded-md bg-amikom-purple px-5 py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98] hover:bg-amikom-purple-hover hover:text-amikom-jonquil-warm">
             + Tambah
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Stats */}
       <div className="flex gap-4 text-sm text-slate-600 font-mono animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
@@ -209,7 +229,7 @@ export default function AdminCareerCenterPage() {
                     className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-all hover:border-slate-400 hover:text-slate-900">
                     Edit
                   </button>
-                  <button onClick={() => handleDelete(job.id)}
+                  <button onClick={() => confirmDelete(job.id)}
                     className="rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 transition-all hover:bg-red-50 hover:border-red-300">
                     Hapus
                   </button>
@@ -221,97 +241,136 @@ export default function AdminCareerCenterPage() {
       )}
 
       {/* Modal Form */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-          <div className="w-full max-w-lg mx-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm animate-fade-in-up max-h-[85vh] overflow-y-auto">
-            <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-slate-500 mb-4">
-              {editingId ? 'Edit Lowongan' : 'Tambah Lowongan'}
-            </p>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Judul</label>
-                  <input type="text" required value={form.title} onChange={(e) => setForm(f => ({ ...f, title: e.target.value }))}
-                    placeholder="Senior Frontend Engineer"
-                    className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20" />
-                </div>
-                <div className="space-y-2">
-                  <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Tipe</label>
-                  <select value={form.type} onChange={(e) => setForm(f => ({ ...f, type: e.target.value as 'Full-time' | 'Part-time' | 'Contract' | 'Internship' }))}
-                    className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20">
-                    <option value="Full-time">Full-time</option>
-                    <option value="Part-time">Part-time</option>
-                    <option value="Contract">Contract</option>
-                    <option value="Internship">Internship</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Perusahaan</label>
-                  <input type="text" required value={form.company} onChange={(e) => setForm(f => ({ ...f, company: e.target.value }))}
-                    placeholder="Nama perusahaan"
-                    className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20" />
-                </div>
-                <div className="space-y-2">
-                  <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Lokasi</label>
-                  <input type="text" required value={form.location} onChange={(e) => setForm(f => ({ ...f, location: e.target.value }))}
-                    placeholder="Jakarta, Remote"
-                    className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20" />
-                </div>
-              </div>
-
+      <Modal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        title={editingId ? 'Edit Lowongan' : 'Tambah Lowongan'}
+        footer={
+          <>
+            <button type="button" onClick={() => setShowModal(false)}
+              className="rounded-md border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-600 transition-all hover:border-slate-400 hover:text-slate-900">
+              Batal
+            </button>
+            <button type="submit" disabled={submitting} form="career-form"
+              className="rounded-md bg-amikom-purple px-5 py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98] hover:bg-amikom-purple-hover hover:text-amikom-jonquil-warm disabled:opacity-50 flex items-center gap-2">
+              {submitting ? (
+                <><span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Menyimpan...</>
+              ) : editingId ? 'Simpan' : 'Publikasikan'}
+            </button>
+          </>
+        }
+      >
+        <form id="career-form" onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Gaji (opsional)</label>
-                <input type="text" value={form.salary} onChange={(e) => setForm(f => ({ ...f, salary: e.target.value }))}
-                  placeholder="Rp 15-25 jt"
+                <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Judul</label>
+                <input type="text" required value={form.title} onChange={(e) => setForm(f => ({ ...f, title: e.target.value }))}
+                  placeholder="Senior Frontend Engineer"
                   className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20" />
               </div>
-
               <div className="space-y-2">
-                <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Deskripsi</label>
-                <textarea required value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} rows={4}
-                  placeholder="Deskripsi lowongan..."
-                  className="w-full rounded-md border border-amikom-hairline bg-amikom-canvas px-3.5 py-2.5 text-sm text-amikom-ink placeholder-amikom-ink/30 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20 resize-none" />
+                <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Tipe</label>
+                <select value={form.type} onChange={(e) => setForm(f => ({ ...f, type: e.target.value as 'Full-time' | 'Part-time' | 'Contract' | 'Internship' }))}
+                  className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20">
+                  <option value="Full-time">Full-time</option>
+                  <option value="Part-time">Part-time</option>
+                  <option value="Contract">Contract</option>
+                  <option value="Internship">Internship</option>
+                </select>
               </div>
+            </div>
 
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Skills (pisahkan dengan koma)</label>
-                <input type="text" value={form.skills} onChange={(e) => setForm(f => ({ ...f, skills: e.target.value }))}
-                  placeholder="React, TypeScript, Next.js"
+                <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Perusahaan</label>
+                <input type="text" required value={form.company} onChange={(e) => setForm(f => ({ ...f, company: e.target.value }))}
+                  placeholder="Nama perusahaan"
                   className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20" />
               </div>
-
               <div className="space-y-2">
-                <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Kontak (opsional)</label>
-                <input type="text" value={form.contact_info} onChange={(e) => setForm(f => ({ ...f, contact_info: e.target.value }))}
-                  placeholder="Email atau nomor telepon"
+                <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Lokasi</label>
+                <input type="text" required value={form.location} onChange={(e) => setForm(f => ({ ...f, location: e.target.value }))}
+                  placeholder="Jakarta, Remote"
                   className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20" />
               </div>
+            </div>
 
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={form.is_active} onChange={(e) => setForm(f => ({ ...f, is_active: e.target.checked }))}
-                  className="h-4 w-4 rounded border-slate-300 text-amikom-purple focus:ring-amikom-purple/20" />
-                <span className="text-sm text-slate-600">Publikasikan segera</span>
-              </label>
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Gaji (opsional)</label>
+              <input type="text" value={form.salary} onChange={(e) => setForm(f => ({ ...f, salary: e.target.value }))}
+                placeholder="Rp 15-25 jt"
+                className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20" />
+            </div>
 
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowModal(false)}
-                  className="rounded-md border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-600 transition-all hover:border-slate-400 hover:text-slate-900">
-                  Batal
-                </button>
-                <button type="submit" disabled={submitting}
-                  className="rounded-md bg-amikom-purple px-5 py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98] hover:bg-amikom-purple-hover hover:text-amikom-jonquil-warm disabled:opacity-50 flex items-center gap-2">
-                  {submitting ? (
-                    <><span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Menyimpan...</>
-                  ) : editingId ? 'Simpan' : 'Publikasikan'}
-                </button>
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Deskripsi</label>
+              <textarea required value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} rows={4}
+                placeholder="Deskripsi lowongan..."
+                className="w-full rounded-md border border-amikom-hairline bg-amikom-canvas px-3.5 py-2.5 text-sm text-amikom-ink placeholder-amikom-ink/30 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20 resize-none" />
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Skills (pisahkan dengan koma)</label>
+              <input type="text" value={form.skills} onChange={(e) => setForm(f => ({ ...f, skills: e.target.value }))}
+                placeholder="React, TypeScript, Next.js"
+                className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20" />
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Kontak (opsional)</label>
+              <input type="text" value={form.contact_info} onChange={(e) => setForm(f => ({ ...f, contact_info: e.target.value }))}
+                placeholder="Email atau nomor telepon"
+                className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">URL Pendaftaran</label>
+                <input type="url" value={form.url} onChange={(e) => setForm(f => ({ ...f, url: e.target.value }))}
+                  placeholder="https://example.com/apply"
+                  className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20" />
               </div>
-            </form>
-          </div>
-        </div>
-      )}
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-slate-600 font-mono uppercase tracking-wider">Sumber</label>
+                <select value={form.source} onChange={(e) => setForm(f => ({ ...f, source: e.target.value }))}
+                  className="w-full rounded-md border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition-all focus:border-amikom-purple focus:ring-2 focus:ring-amikom-purple/20">
+                  <option value="">Pilih sumber...</option>
+                  <option value="Internal">Internal</option>
+                  <option value="LinkedIn">LinkedIn</option>
+                  <option value="Jobstreet">Jobstreet</option>
+                  <option value="Glints">Glints</option>
+                  <option value="E-mail">E-mail</option>
+                  <option value="Lainnya">Lainnya</option>
+                </select>
+              </div>
+            </div>
+
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" checked={form.is_active} onChange={(e) => setForm(f => ({ ...f, is_active: e.target.checked }))}
+                className="h-4 w-4 rounded border-slate-300 text-amikom-purple focus:ring-amikom-purple/20" />
+              <span className="text-sm text-slate-600">Publikasikan segera</span>
+            </label>
+
+          </form>
+      </Modal>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Lowongan?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tindakan ini tidak dapat dibatalkan. Lowongan akan dihapus permanen.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

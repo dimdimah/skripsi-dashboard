@@ -9,7 +9,8 @@ import { describe, it, expect, jest, beforeEach } from "@jest/globals"
 
 // ── Mocks ──
 
-const mockCreateUser = jest.fn()
+const mockCreateUser = jest.fn<() => Promise<{ data: { user: { id: string } } | null; error: { message: string } | null }>>()
+const mockFrom = jest.fn()
 
 jest.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
@@ -18,6 +19,7 @@ jest.mock("@/lib/supabase/admin", () => ({
         createUser: mockCreateUser,
       },
     },
+    from: mockFrom,
   }),
 }))
 
@@ -32,6 +34,17 @@ import { bulkImportUsers, type BulkImportResult } from "@/lib/actions/bulk-impor
 function makeCSV(headers: string, ...rows: string[]): string {
   return [headers, ...rows].join("\n")
 }
+
+beforeEach(() => {
+  mockCreateUser.mockReset()
+  mockCreateUser.mockResolvedValue({ data: { user: { id: "mock-id" } }, error: null })
+  mockFrom.mockReset()
+  mockFrom.mockReturnValue({
+    update: jest.fn().mockReturnValue({
+      eq: jest.fn().mockResolvedValue({ error: null }),
+    }),
+  })
+})
 
 // ── Tests ──
 
@@ -48,7 +61,7 @@ describe("Bulk Import — Server Action Logic", () => {
     it("should accept standard headers: Nama,Email,Password,Role", async () => {
       const csv = makeCSV(
         "Nama,Email,Password,Role",
-        "Budi,budi@amikomsurakarta.ac.id,password123,user"
+        "Budi,budi@amikomsolo.ac.id,password123,user"
       )
       const res = await bulkImportUsers(csv)
       expect(res.total).toBe(1)
@@ -59,7 +72,7 @@ describe("Bulk Import — Server Action Logic", () => {
     it("should accept alternative headers: Name,Email,Pass,Roles", async () => {
       const csv = makeCSV(
         "Name,Email,Pass,Roles",
-        "Siti,siti@amikomsurakarta.ac.id,password123,user"
+        "Siti,siti@amikomsolo.ac.id,password123,user"
       )
       const res = await bulkImportUsers(csv)
       expect(res.total).toBe(1)
@@ -69,7 +82,7 @@ describe("Bulk Import — Server Action Logic", () => {
     it("should accept display_name as header", async () => {
       const csv = makeCSV(
         "display_name,Email,Password",
-        "Andi,andi@amikomsurakarta.ac.id,password123"
+        "Andi,andi@amikomsolo.ac.id,password123"
       )
       const res = await bulkImportUsers(csv)
       expect(res.total).toBe(1)
@@ -79,7 +92,7 @@ describe("Bulk Import — Server Action Logic", () => {
     it("should be case-insensitive for headers", async () => {
       const csv = makeCSV(
         "NAMA,EMAIL,PASSWORD,ROLE",
-        "Dewi,dewi@amikomsurakarta.ac.id,password123,user"
+        "Dewi,dewi@amikomsolo.ac.id,password123,user"
       )
       const res = await bulkImportUsers(csv)
       expect(res.total).toBe(1)
@@ -99,7 +112,7 @@ describe("Bulk Import — Server Action Logic", () => {
     it("should fail if Password header is missing", async () => {
       const csv = makeCSV(
         "Nama,Email,Role",
-        "Budi,budi@amikomsurakarta.ac.id,user"
+        "Budi,budi@amikomsolo.ac.id,user"
       )
       const res = await bulkImportUsers(csv)
       expect(res.errors[0].message).toContain("Header wajib")
@@ -108,7 +121,7 @@ describe("Bulk Import — Server Action Logic", () => {
     it("should fail if Nama header is missing", async () => {
       const csv = makeCSV(
         "Email,Password,Role",
-        "budi@amikomsurakarta.ac.id,password123,user"
+        "budi@amikomsolo.ac.id,password123,user"
       )
       const res = await bulkImportUsers(csv)
       expect(res.errors[0].message).toContain("Header wajib")
@@ -117,7 +130,7 @@ describe("Bulk Import — Server Action Logic", () => {
     it("should succeed without Role header (defaults to user)", async () => {
       const csv = makeCSV(
         "Nama,Email,Password",
-        "Budi,budi@amikomsurakarta.ac.id,password123"
+        "Budi,budi@amikomsolo.ac.id,password123"
       )
       const res = await bulkImportUsers(csv)
       expect(res.success).toBe(1)
@@ -133,14 +146,14 @@ describe("Bulk Import — Server Action Logic", () => {
   // 2. Row Validation (Zod)
   // ─────────────────────────────────
   describe("Row Validation", () => {
-    it("should reject email not ending with @amikomsurakarta.ac.id", async () => {
+    it("should reject email not ending with @amikomsolo.ac.id", async () => {
       const csv = makeCSV(
         "Nama,Email,Password,Role",
         "Budi,budi@gmail.com,password123,user"
       )
       const res = await bulkImportUsers(csv)
       expect(res.failed).toBe(1)
-      expect(res.errors[0].message).toContain("@amikomsurakarta.ac.id")
+      expect(res.errors[0].message).toContain("@amikomsolo.ac.id")
     })
 
     it("should reject invalid email format", async () => {
@@ -156,7 +169,7 @@ describe("Bulk Import — Server Action Logic", () => {
     it("should reject password shorter than 6 characters", async () => {
       const csv = makeCSV(
         "Nama,Email,Password,Role",
-        "Budi,budi@amikomsurakarta.ac.id,12345,user"
+        "Budi,budi@amikomsolo.ac.id,12345,user"
       )
       const res = await bulkImportUsers(csv)
       expect(res.failed).toBe(1)
@@ -166,7 +179,7 @@ describe("Bulk Import — Server Action Logic", () => {
     it("should reject empty name", async () => {
       const csv = makeCSV(
         "Nama,Email,Password,Role",
-        ",budi@amikomsurakarta.ac.id,password123,user"
+        ",budi@amikomsolo.ac.id,password123,user"
       )
       const res = await bulkImportUsers(csv)
       expect(res.failed).toBe(1)
@@ -176,7 +189,7 @@ describe("Bulk Import — Server Action Logic", () => {
     it("should reject invalid role value", async () => {
       const csv = makeCSV(
         "Nama,Email,Password,Role",
-        "Budi,budi@amikomsurakarta.ac.id,password123,admin"
+        "Budi,budi@amikomsolo.ac.id,password123,admin"
       )
       const res = await bulkImportUsers(csv)
       expect(res.failed).toBe(1)
@@ -185,7 +198,7 @@ describe("Bulk Import — Server Action Logic", () => {
     it("should accept role super_user", async () => {
       const csv = makeCSV(
         "Nama,Email,Password,Role",
-        "Budi,budi@amikomsurakarta.ac.id,password123,super_user"
+        "Budi,budi@amikomsolo.ac.id,password123,super_user"
       )
       const res = await bulkImportUsers(csv)
       expect(res.success).toBe(1)
@@ -199,7 +212,7 @@ describe("Bulk Import — Server Action Logic", () => {
     it("should default role to user when column is empty", async () => {
       const csv = makeCSV(
         "Nama,Email,Password,Role",
-        "Budi,budi@amikomsurakarta.ac.id,password123,"
+        "Budi,budi@amikomsolo.ac.id,password123,"
       )
       const res = await bulkImportUsers(csv)
       expect(res.success).toBe(1)
@@ -231,7 +244,7 @@ describe("Bulk Import — Server Action Logic", () => {
     it("should handle CSV with quoted fields containing commas", async () => {
       const csv = makeCSV(
         "Nama,Email,Password,Role",
-        '"Budi, S.Pd",budi@amikomsurakarta.ac.id,password123,user'
+        '"Budi, S.Pd",budi@amikomsolo.ac.id,password123,user'
       )
       const res = await bulkImportUsers(csv)
       expect(res.success).toBe(1)
@@ -245,14 +258,14 @@ describe("Bulk Import — Server Action Logic", () => {
     it("should handle CSV with quoted fields containing escaped quotes", async () => {
       const csv = makeCSV(
         "Nama,Email,Password,Role",
-        '"Budi ""The Boss""",budi@amikomsurakarta.ac.id,password123,user'
+        '"Budi ""The Boss""",budi@amikomsolo.ac.id,password123,user'
       )
       const res = await bulkImportUsers(csv)
       expect(res.success).toBe(1)
     })
 
     it("should skip blank lines", async () => {
-      const csv = "Nama,Email,Password,Role\n\nBudi,budi@amikomsurakarta.ac.id,password123,user\n\n"
+      const csv = "Nama,Email,Password,Role\n\nBudi,budi@amikomsolo.ac.id,password123,user\n\n"
       const res = await bulkImportUsers(csv)
       expect(res.total).toBe(1)
       expect(res.success).toBe(1)
@@ -261,9 +274,9 @@ describe("Bulk Import — Server Action Logic", () => {
     it("should handle mixed valid and invalid rows", async () => {
       const csv = makeCSV(
         "Nama,Email,Password,Role",
-        "Valid1,valid1@amikomsurakarta.ac.id,password123,user",
-        ",invalid@amikomsurakarta.ac.id,password123,user",
-        "Valid2,valid2@amikomsurakarta.ac.id,password123,user"
+        "Valid1,valid1@amikomsolo.ac.id,password123,user",
+        ",invalid@amikomsolo.ac.id,password123,user",
+        "Valid2,valid2@amikomsolo.ac.id,password123,user"
       )
       const res = await bulkImportUsers(csv)
       expect(res.total).toBe(3)
@@ -274,7 +287,7 @@ describe("Bulk Import — Server Action Logic", () => {
     it("should handle rows with fewer columns than headers", async () => {
       const csv = makeCSV(
         "Nama,Email,Password,Role",
-        "Budi,budi@amikomsurakarta.ac.id"
+        "Budi,budi@amikomsolo.ac.id"
       )
       const res = await bulkImportUsers(csv)
       expect(res.failed).toBe(1)
@@ -288,11 +301,11 @@ describe("Bulk Import — Server Action Logic", () => {
     it("should call createUser with correct parameters", async () => {
       const csv = makeCSV(
         "Nama,Email,Password,Role",
-        "Budi,budi@amikomsurakarta.ac.id,password123,user"
+        "Budi,budi@amikomsolo.ac.id,password123,user"
       )
       await bulkImportUsers(csv)
       expect(mockCreateUser).toHaveBeenCalledWith({
-        email: "budi@amikomsurakarta.ac.id",
+        email: "budi@amikomsolo.ac.id",
         password: "password123",
         email_confirm: true,
         user_metadata: {
@@ -309,7 +322,7 @@ describe("Bulk Import — Server Action Logic", () => {
       })
       const csv = makeCSV(
         "Nama,Email,Password,Role",
-        "Budi,budi@amikomsurakarta.ac.id,password123,user"
+        "Budi,budi@amikomsolo.ac.id,password123,user"
       )
       const res = await bulkImportUsers(csv)
       expect(res.failed).toBe(1)
@@ -320,7 +333,7 @@ describe("Bulk Import — Server Action Logic", () => {
       mockCreateUser.mockRejectedValueOnce(new Error("Network error"))
       const csv = makeCSV(
         "Nama,Email,Password,Role",
-        "Budi,budi@amikomsurakarta.ac.id,password123,user"
+        "Budi,budi@amikomsolo.ac.id,password123,user"
       )
       const res = await bulkImportUsers(csv)
       expect(res.failed).toBe(1)
@@ -335,9 +348,9 @@ describe("Bulk Import — Server Action Logic", () => {
 
       const csv = makeCSV(
         "Nama,Email,Password,Role",
-        "User1,user1@amikomsurakarta.ac.id,password123,user",
-        "User2,user2@amikomsurakarta.ac.id,password123,user",
-        "User3,user3@amikomsurakarta.ac.id,password123,user"
+        "User1,user1@amikomsolo.ac.id,password123,user",
+        "User2,user2@amikomsolo.ac.id,password123,user",
+        "User3,user3@amikomsolo.ac.id,password123,user"
       )
       const res = await bulkImportUsers(csv)
       expect(res.total).toBe(3)

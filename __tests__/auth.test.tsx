@@ -19,8 +19,8 @@ const loginSchema = z.object({
     .min(1, "Email wajib diisi")
     .email("Format email tidak valid")
     .regex(
-      /^[a-zA-Z0-9._%+-]+@amikomsurakarta\.ac\.id$/,
-      "Gunakan email institusi @amikomsurakarta.ac.id",
+      /^[a-zA-Z0-9._%+-]+@amikomsolo\.ac\.id$/,
+      "Gunakan email institusi @amikomsolo.ac.id",
     ),
   password: z.string().min(1, "Password wajib diisi"),
 })
@@ -31,8 +31,8 @@ const loginSchemaStrict = z.object({
     .min(1, "Email wajib diisi")
     .email("Format email tidak valid")
     .regex(
-      /^[a-zA-Z0-9._%+-]+@amikomsurakarta\.ac\.id$/,
-      "Gunakan email institusi @amikomsurakarta.ac.id",
+      /^[a-zA-Z0-9._%+-]+@amikomsolo\.ac\.id$/,
+      "Gunakan email institusi @amikomsolo.ac.id",
     ),
   password: z.string().min(6, "Password minimal 6 karakter"),
 })
@@ -102,7 +102,7 @@ describe("TC 1.1 — Login Form Validation (Zod)", () => {
 
   it("should reject password shorter than 6 characters in strict mode", () => {
     const result = loginSchemaStrict.safeParse({
-      email: "nim@amikomsurakarta.ac.id",
+      email: "nim@amikomsolo.ac.id",
       password: "123",
     })
     expect(result.success).toBe(false)
@@ -114,7 +114,7 @@ describe("TC 1.1 — Login Form Validation (Zod)", () => {
 
   it("should accept valid institution email and password", () => {
     const result = loginSchema.safeParse({
-      email: "nim@amikomsurakarta.ac.id",
+      email: "nim@amikomsolo.ac.id",
       password: "123456",
     })
     expect(result.success).toBe(true)

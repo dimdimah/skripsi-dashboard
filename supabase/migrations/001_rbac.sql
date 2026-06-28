@@ -19,7 +19,7 @@ create table public.profiles (
   updated_at    timestamptz default now()
 );
 
--- 3. Trigger: auto-insert profile saat user register
+-- 3. Trigger: auto-insert profile saat user register (role selalu 'user', tidak dari metadata client)
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -28,11 +28,7 @@ set search_path = public
 as $$
 begin
   insert into public.profiles (id, email, role)
-  values (
-    new.id,
-    new.email,
-    coalesce(new.raw_user_meta_data->>'role', 'user')::public.app_role
-  );
+  values (new.id, new.email, 'user');
   return new;
 end;
 $$;

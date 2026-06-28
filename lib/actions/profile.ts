@@ -1,14 +1,11 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
 import { profileSchema, changePasswordSchema } from '@/lib/schemas/profile'
+import { withAuth, orThrow } from './helpers'
 
 export async function updateProfile(formData: FormData) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  const { supabase, user } = await withAuth()
 
   const raw = {
     full_name: formData.get('full_name') as string,
@@ -32,23 +29,29 @@ export async function updateProfile(formData: FormData) {
     ? parsed.data.skills.split(/[,;]/).map(s => s.trim()).filter(Boolean)
     : []
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase.from('profiles') as any)
+  const { error } = await supabase
+    .from('profiles')
     .update({
-      ...parsed.data,
+      full_name: parsed.data.full_name,
+      phone: parsed.data.phone,
+      bio: parsed.data.bio,
+      nim: parsed.data.nim,
+      tanggal_lahir: parsed.data.tanggal_lahir,
       skills: skillsArray,
-    })
+      location: parsed.data.location,
+      education_level: parsed.data.education_level,
+      expected_salary: parsed.data.expected_salary,
+      preferred_type: parsed.data.preferred_type,
+    } as never)
     .eq('id', user.id)
 
-  if (error) throw new Error(error.message)
+  orThrow(error, 'Gagal update profil', 'Gagal menyimpan profil. Silakan coba lagi.')
 
   revalidatePath('/dashboard/profile')
 }
 
 export async function changePassword(formData: FormData) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  const { supabase, user } = await withAuth()
 
   const raw = {
     current_password: formData.get('current_password') as string,
@@ -61,7 +64,6 @@ export async function changePassword(formData: FormData) {
     throw new Error(parsed.error.issues.map(e => e.message).join(', '))
   }
 
-  // First verify current password by attempting to sign in
   const { error: signInError } = await supabase.auth.signInWithPassword({
     email: user.email!,
     password: parsed.data.current_password,
@@ -69,12 +71,14 @@ export async function changePassword(formData: FormData) {
 
   if (signInError) throw new Error('Password saat ini salah')
 
-  // Update password
   const { error: updateError } = await supabase.auth.updateUser({
     password: parsed.data.new_password,
   })
 
-  if (updateError) throw new Error(updateError.message)
+  if (updateError) {
+    console.error('Gagal ganti password:', updateError.message)
+    throw new Error('Gagal mengganti password. Silakan coba lagi.')
+  }
 
   revalidatePath('/dashboard/profile')
 }

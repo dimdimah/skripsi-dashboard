@@ -1,31 +1,18 @@
 import Link from 'next/link'
 import BulkImportForm from '@/components/super-user/bulk-import-form'
 import DownloadTemplateButton from '@/components/download-template-button'
+import { PageHeader } from '@/components/ui/page-header'
 
 export default function AdminBulkImportPage() {
   return (
     <div className="space-y-8">
-      {/* Header */}
       <div className="space-y-1.5 animate-fade-in-up">
-        <Link
-          href="/admin"
-          className="inline-flex items-center gap-2 text-sm text-slate-600 transition-colors hover:text-slate-900"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-          Kembali
-        </Link>
-        <div className="flex items-center gap-2">
-          <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-amikom-purple text-amikom-jonquil-warm text-[10px]">📋</span>
-          <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-slate-500">Admin Panel</p>
-        </div>
-        <h1 className="font-sans text-3xl md:text-4xl font-semibold tracking-[-0.03em] text-slate-900 leading-[1.1]">
-          Import User Massal.
-        </h1>
-        <p className="text-slate-600">
-          Upload file CSV untuk menambah banyak user alumni sekaligus. Akun langsung aktif tanpa verifikasi email.
-        </p>
+        <PageHeader
+          icon={<span className="text-[11px]">📋</span>}
+          label="Admin Panel"
+          title="Import User Massal."
+          subtitle="Upload file CSV untuk menambah banyak user alumni sekaligus. Akun langsung aktif tanpa verifikasi email."
+        />
       </div>
 
       {/* Download Template */}

@@ -1,8 +1,12 @@
 'use client'
 
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useCallback } from 'react'
 import { bulkImportUsers, type BulkImportResult } from '@/lib/actions/bulk-import'
-import { excelFileToCSV } from '@/components/download-template-button'
+import { excelFileToCSV, exportPreviewToExcel } from '@/components/download-template-button'
+import { parseCSVLine } from '@/lib/csv-utils'
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
+const ALLOWED_EXTENSIONS = ['.csv', '.xlsx', '.xls']
 
 export default function BulkImportForm() {
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -11,31 +15,91 @@ export default function BulkImportForm() {
   const [importing, setImporting] = useState(false)
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<BulkImportResult | null>(null)
+  const [dragOver, setDragOver] = useState(false)
 
-  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+  // ── Drag & Drop handlers ──
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOver(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOver(false)
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) processFile(file)
+  }, [])
+
+  // ── File processing ──
+  const handleExportPreview = async () => {
+    if (preview.length > 0) await exportPreviewToExcel(preview)
+  }
+
+  function readFileAsText(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = () => reject(new Error('Gagal membaca file'))
+      reader.readAsText(file)
+    })
+  }
+
+  function processFile(file: File) {
+    const ext = '.' + file.name.split('.').pop()?.toLowerCase()
+
+    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+      setResult({
+        total: 0, success: 0, failed: 1,
+        errors: [{ row: 0, message: `Format .${ext} tidak didukung. Upload file .csv atau .xlsx/.xls` }],
+      })
+      return
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      setResult({
+        total: 0, success: 0, failed: 1,
+        errors: [{ row: 0, message: `File terlalu besar (${(file.size / 1024 / 1024).toFixed(1)} MB). Maksimal 10 MB.` }],
+      })
+      return
+    }
+
     setFileName(file.name)
     setResult(null)
     setLoading(true)
 
-    try {
-      const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
-      if (isExcel) {
-        const csv = await excelFileToCSV(file)
-        setRaw(csv)
-      } else {
-        const text = await file.text()
-        setRaw(text)
+    ;(async () => {
+      try {
+        const isExcel = ext === '.xlsx' || ext === '.xls'
+        if (isExcel) {
+          const csv = await excelFileToCSV(file)
+          setRaw(csv)
+        } else {
+          const text = await readFileAsText(file)
+          setRaw(text)
+        }
+      } catch {
+        setResult({
+          total: 0, success: 0, failed: 1,
+          errors: [{ row: 0, message: 'Gagal membaca file. Pastikan format file benar.' }],
+        })
+      } finally {
+        setLoading(false)
       }
-    } catch {
-      setResult({
-        total: 0, success: 0, failed: 1,
-        errors: [{ row: 0, message: 'Gagal membaca file. Pastikan format file benar.' }],
-      })
-    } finally {
-      setLoading(false)
-    }
+    })()
+  }
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    processFile(file)
   }
 
   function clearFile() {
@@ -45,43 +109,37 @@ export default function BulkImportForm() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  function parseCSVLine(line: string): string[] {
-    const result: string[] = []
-    let current = ''
-    let inQuotes = false
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i]
-      if (char === '"') {
-        if (inQuotes && i + 1 < line.length && line[i + 1] === '"') {
-          current += '"'
-          i++
-        } else {
-          inQuotes = !inQuotes
-        }
-      } else if (char === ',' && !inQuotes) {
-        result.push(current.trim())
-        current = ''
-      } else {
-        current += char
-      }
-    }
-    result.push(current.trim())
-    return result
-  }
-
+  // ── Preview (dengan validasi selaras dengan server) ──
   const preview = useMemo(() => {
     if (!raw.trim()) return []
-    const lines = raw.trim().split('\n').filter(Boolean)
+    const clean = raw.replace(/\r\n/g, '\n').replace(/\r/g, '')
+    const lines = clean.split('\n').map(l => l.trim()).filter(l => l.length > 0)
     if (lines.length < 2) return []
     const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase())
     return lines.slice(1).map((line, i) => {
       const cols = parseCSVLine(line)
       const email = cols[headers.findIndex(h => h === 'email')] || ''
       const name = cols[headers.findIndex(h => h === 'nama' || h === 'name' || h === 'display_name')] || ''
+      const password = cols[headers.findIndex(h => h === 'password' || h === 'pass')] || ''
       const role = cols[headers.findIndex(h => h === 'role' || h === 'roles')] || 'user'
       const skills = cols[headers.findIndex(h => h === 'skills' || h === 'skill')] || ''
       const location = cols[headers.findIndex(h => h === 'location' || h === 'lokasi')] || ''
-      return { row: i + 2, email, name, role, skills, location, valid: email.includes('@') && name.length > 0 }
+
+      // Validasi preview selaras dengan Zod server:
+      // - email harus @amikomsolo.ac.id
+      // - nama tidak boleh kosong
+      // - password minimal 8 karakter (uppercase, lowercase, digit)
+      // - role di-hardcode 'user' (tidak diproses dari CSV untuk keamanan)
+      const valid =
+        name.length > 0 &&
+        email.endsWith('@amikomsolo.ac.id') &&
+        password.length >= 8 &&
+        /[A-Z]/.test(password) &&
+        /[a-z]/.test(password) &&
+        /[0-9]/.test(password)
+
+      return { row: i + 2, email, name, password, role, skills, location, valid }
+      // role diabaikan, akan di-set 'user' oleh server
     })
   }, [raw])
 
@@ -116,7 +174,16 @@ export default function BulkImportForm() {
         </p>
 
         {!raw ? (
-          <label className="flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 p-8 cursor-pointer transition-all hover:border-amikom-purple hover:bg-sky-50/50">
+          <label
+            className={`flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-8 cursor-pointer transition-all ${
+              dragOver
+                ? 'border-amikom-purple bg-amikom-purple/5'
+                : 'border-slate-300 bg-slate-50 hover:border-amikom-purple hover:bg-sky-50/50'
+            }`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
             {loading ? (
               <span className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-amikom-purple border-t-transparent" />
             ) : (
@@ -133,7 +200,7 @@ export default function BulkImportForm() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv,.txt,.xlsx,.xls"
+              accept=".csv,.xlsx,.xls"
               onChange={handleFile}
               className="hidden"
             />
@@ -175,6 +242,9 @@ export default function BulkImportForm() {
           <div className="px-4 py-3 border-b border-slate-200 bg-slate-50">
             <p className="text-xs font-mono text-slate-600">
               <span className="text-slate-900 font-medium">{preview.length}</span> baris akan diimpor
+              <span className="text-slate-400 ml-2">
+                ({preview.filter(p => p.valid).length} valid, {preview.filter(p => !p.valid).length} bermasalah)
+              </span>
             </p>
           </div>
           <div className="overflow-x-auto max-h-48 overflow-y-auto">
@@ -184,7 +254,7 @@ export default function BulkImportForm() {
                   <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-slate-500">#</th>
                   <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-slate-500">Nama</th>
                   <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-slate-500">Email</th>
-                  <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-slate-500">Role</th>
+                  <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-slate-500">Password</th>
                   <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-slate-500">Skills</th>
                   <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-slate-500">Lokasi</th>
                   <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-slate-500">Status</th>
@@ -194,23 +264,15 @@ export default function BulkImportForm() {
                 {preview.map((p) => (
                   <tr key={p.row} className={`${!p.valid ? 'bg-red-50' : ''}`}>
                     <td className="px-4 py-2 text-slate-500 font-mono">{p.row}</td>
-                    <td className="px-4 py-2 text-slate-900">{p.name}</td>
+                    <td className="px-4 py-2 text-slate-900">{p.name || <span className="text-red-400">(kosong)</span>}</td>
                     <td className="px-4 py-2 text-slate-600">{p.email}</td>
-                    <td className="px-4 py-2">
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-mono font-medium ${
-                        p.role === 'super_user'
-                          ? 'bg-amikom-purple/10 text-amikom-purple'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}>
-                        {p.role}
-                      </span>
-                    </td>
+                    <td className="px-4 py-2 text-slate-400 font-mono">{'•'.repeat(Math.min(p.password.length, 8))}</td>
                     <td className="px-4 py-2 text-slate-600 text-xs max-w-[150px] truncate">{p.skills || '—'}</td>
                     <td className="px-4 py-2 text-slate-600 text-xs">{p.location || '—'}</td>
                     <td className="px-4 py-2">
                       {p.valid
-                        ? <span className="text-green-600 text-[10px] font-mono">✓</span>
-                        : <span className="text-red-500 text-[10px] font-mono">✗</span>
+                        ? <span className="text-green-600 text-[10px] font-mono" title="Valid">✓</span>
+                        : <span className="text-red-500 text-[10px] font-mono" title={!p.name ? 'Nama kosong' : !p.email.endsWith('@amikomsolo.ac.id') ? 'Harus @amikomsolo.ac.id' : !/(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])/.test(p.password) || p.password.length < 8 ? 'Password: 8+ karakter (huruf besar, kecil, angka)' : 'Data tidak valid'}>✗</span>
                       }
                     </td>
                   </tr>
@@ -268,6 +330,14 @@ export default function BulkImportForm() {
                 <p className="mt-2 text-xs text-green-700">
                   Akun langsung aktif tanpa verifikasi email.
                 </p>
+              )}
+              {preview.length > 0 && (
+                <button
+                  onClick={handleExportPreview}
+                  className="mt-3 rounded-md bg-slate-700 px-3 py-1.5 text-xs font-medium text-white transition-all hover:bg-slate-800 active:scale-[0.98]"
+                >
+                  Export Preview ke Excel
+                </button>
               )}
             </div>
           </div>

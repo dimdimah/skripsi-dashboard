@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { getJobRecommendations } from '@/lib/actions/matching'
+import { PageHeader } from '@/components/ui/page-header'
 import { Badge } from '@/components/ui/badge'
 import type { MatchResult } from '@/types/database'
 
@@ -70,14 +71,17 @@ export default function RekomendasiPage() {
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState<'score' | 'date'>('score')
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   useEffect(() => {
     ;(async () => {
       try {
         const data = await getJobRecommendations(20)
         setResults(data)
-      } catch {
-        // silent fail
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Terjadi kesalahan'
+        console.error('Gagal memuat rekomendasi:', err)
+        setErrorMsg(msg)
       } finally {
         setLoading(false)
       }
@@ -91,21 +95,12 @@ export default function RekomendasiPage() {
 
   return (
     <div className="page-container space-y-8 pb-8">
-      {/* Header */}
-      <div className="space-y-2 animate-fade-in-up">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-amikom-purple text-amikom-jonquil-warm text-xs">★</span>
-          <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-slate-500">
-            Smart Matching
-          </p>
-        </div>
-        <h1 className="font-sans text-3xl md:text-4xl font-semibold text-slate-900 leading-[1.1] tracking-[-0.03em]">
-          Rekomendasi Lowongan.
-        </h1>
-        <p className="text-slate-600">
-          Lowongan yang dipilih berdasarkan profil dan preferensi kamu.
-        </p>
-      </div>
+      <PageHeader
+        icon={<span className="text-[11px]">★</span>}
+        label="Smart Matching"
+        title="Rekomendasi Lowongan."
+        subtitle="Lowongan yang dipilih berdasarkan profil dan preferensi kamu."
+      />
 
       {/* Sort controls */}
       {!loading && results.length > 0 && (
@@ -167,12 +162,32 @@ export default function RekomendasiPage() {
           <span className="text-3xl text-slate-500">★</span>
           <p className="mt-4 text-sm text-slate-500">Belum ada rekomendasi</p>
           <p className="mt-1 text-xs text-slate-400">Lengkapi profil kamu untuk mendapatkan rekomendasi lowongan</p>
+          {errorMsg && (
+            <p className="mt-2 text-xs text-red-500 font-mono">Error: {errorMsg}</p>
+          )}
           <a
             href="/user/profile"
             className="mt-4 rounded-md border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-600 hover:border-slate-400 hover:text-slate-900 transition-all"
           >
             Lengkapi Profil
           </a>
+          <button
+            onClick={async () => {
+              setLoading(true)
+              setErrorMsg(null)
+              try {
+                const data = await getJobRecommendations(20)
+                setResults(data)
+              } catch (err) {
+                setErrorMsg(err instanceof Error ? err.message : 'Terjadi kesalahan')
+              } finally {
+                setLoading(false)
+              }
+            }}
+            className="mt-3 text-xs text-amikom-purple underline underline-offset-2 hover:text-amikom-purple-hover"
+          >
+            Coba lagi
+          </button>
         </div>
       ) : (
         /* Results grid */

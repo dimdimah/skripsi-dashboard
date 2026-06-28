@@ -9,19 +9,3 @@ export function createClient() {
   )
 }
 
-export async function signUp(
-  email: string,
-  password: string,
-  options?: { role?: string }
-) {
-  const supabase = createClient()
-  return supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
-        role: options?.role || 'user',
-      },
-    },
-  })
-}

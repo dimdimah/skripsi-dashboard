@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getTracerStudyStats } from '@/lib/actions/questions'
+import { getTracerStudyStats, getAvailableYears } from '@/lib/actions/questions'
 import { getMatchingStats } from '@/lib/actions/matching'
-import { BarChart3, PieChart, TrendingUp, Users, Target, Briefcase } from 'lucide-react'
+import { exportAnalyticsSummaryToExcelClient } from '@/lib/utils/export-client'
+import { PageHeader } from '@/components/ui/page-header'
+import { BarChart3, PieChart, TrendingUp, Users, Target, Briefcase, Filter, Download } from 'lucide-react'
 
 interface MatchingStats {
   totalAlumni: number
@@ -24,17 +26,32 @@ export default function AdminAnalyticsPage() {
   } | null>(null)
   const [matchingStats, setMatchingStats] = useState<MatchingStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [selectedYear, setSelectedYear] = useState<string>('')
+  const [availableYears, setAvailableYears] = useState<string[]>([])
+  const [isFilteredStats, setIsFilteredStats] = useState(false)
 
   useEffect(() => {
+    getAvailableYears().then(years => {
+      setAvailableYears(years)
+    })
+  }, [])
+
+  useEffect(() => {
+    setLoading(true)
     Promise.all([
-      getTracerStudyStats(),
+      getTracerStudyStats(selectedYear || undefined),
       getMatchingStats(),
     ]).then(([tracerData, matchingData]) => {
       setStats(tracerData)
       setMatchingStats(matchingData)
       setLoading(false)
     }).catch(() => setLoading(false))
-  }, [])
+  }, [selectedYear])
+
+  const handleYearChange = (year: string) => {
+    setSelectedYear(year)
+    setIsFilteredStats(year !== '')
+  }
 
   if (loading) {
     return (
@@ -53,16 +70,33 @@ export default function AdminAnalyticsPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
       <div className="space-y-1.5 animate-fade-in-up">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-amikom-purple text-amikom-jonquil-warm text-[10px]">📊</span>
-          <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-slate-500">Analytics</p>
-        </div>
-        <h1 className="font-sans text-3xl md:text-4xl font-semibold tracking-[-0.03em] text-slate-900 leading-[1.1]">
-          Analisis Data.
-        </h1>
-        <p className="text-slate-600">Visualisasi data tracer study alumni untuk kebutuhan akreditasi.</p>
+        <PageHeader
+          icon={<span className="text-[11px]">📊</span>}
+          label="Analytics"
+          title="Analisis Data."
+          subtitle="Visualisasi data tracer study alumni untuk kebutuhan akreditasi."
+          action={
+            <div className="relative">
+              <Filter className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              <select
+                value={selectedYear}
+                onChange={(e) => handleYearChange(e.target.value)}
+                className="h-9 rounded-md border border-slate-200 bg-white pl-8 pr-3 text-sm text-slate-700 shadow-sm transition-colors hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-amikom-purple/20 focus:border-amikom-purple"
+              >
+                <option value="">Semua Tahun</option>
+                {availableYears.map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+            </div>
+          }
+        />
+        {isFilteredStats && (
+          <p className="text-xs font-mono text-amikom-purple">
+            Menampilkan data untuk tahun {selectedYear}
+          </p>
+        )}
       </div>
 
       {/* Summary Cards */}

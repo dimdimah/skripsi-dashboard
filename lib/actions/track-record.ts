@@ -1,21 +1,18 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
 import { trackRecordSchema } from '@/lib/schemas/track-record'
+import { withAuth, orThrow } from './helpers'
 
-export async function createTrackRecord(formData: FormData) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+export async function createTrackRecord(formData: FormData, idempotencyKey?: string) {
+  const { supabase, user } = await withAuth()
 
   const raw = {
     company: formData.get('company') as string,
     position: formData.get('position') as string,
     start_date: formData.get('start_date') as string,
-    end_date: formData.get('end_date') as string || null,
-    description: formData.get('description') as string || null,
+    end_date: (formData.get('end_date') as string) || null,
+    description: (formData.get('description') as string) || null,
     is_current: formData.get('is_current') === 'true',
   }
 
@@ -24,29 +21,33 @@ export async function createTrackRecord(formData: FormData) {
     throw new Error(parsed.error.issues.map(e => e.message).join(', '))
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase.from('track_records') as any).insert({
-    ...parsed.data,
-    user_id: user.id,
-    end_date: parsed.data.is_current ? null : parsed.data.end_date,
-  })
+  const { error } = await supabase
+    .from('track_records')
+    .insert({
+      company: parsed.data.company,
+      position: parsed.data.position,
+      start_date: parsed.data.start_date,
+      end_date: parsed.data.end_date,
+      description: parsed.data.description,
+      is_current: parsed.data.is_current,
+      user_id: user.id,
+      idempotency_key: idempotencyKey || null,
+    } as never)
 
-  if (error) throw new Error(error.message)
+  orThrow(error, 'Gagal buat track record', 'Gagal menyimpan riwayat kerja. Silakan coba lagi.')
 
   revalidatePath('/dashboard/track-record')
 }
 
 export async function updateTrackRecord(id: string, formData: FormData) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  const { supabase, user } = await withAuth()
 
   const raw = {
     company: formData.get('company') as string,
     position: formData.get('position') as string,
     start_date: formData.get('start_date') as string,
-    end_date: formData.get('end_date') as string || null,
-    description: formData.get('description') as string || null,
+    end_date: (formData.get('end_date') as string) || null,
+    description: (formData.get('description') as string) || null,
     is_current: formData.get('is_current') === 'true',
   }
 
@@ -55,32 +56,35 @@ export async function updateTrackRecord(id: string, formData: FormData) {
     throw new Error(parsed.error.issues.map(e => e.message).join(', '))
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase.from('track_records') as any)
+  const { error } = await supabase
+    .from('track_records')
     .update({
-      ...parsed.data,
-      end_date: parsed.data.is_current ? null : parsed.data.end_date,
-    })
+      company: parsed.data.company,
+      position: parsed.data.position,
+      start_date: parsed.data.start_date,
+      end_date: parsed.data.end_date,
+      description: parsed.data.description,
+      is_current: parsed.data.is_current,
+    } as never)
     .eq('id', id)
-    .eq('user_id', user.id)
 
-  if (error) throw new Error(error.message)
+  orThrow(error, 'Gagal update track record', 'Gagal menyimpan riwayat kerja. Silakan coba lagi.')
 
   revalidatePath('/dashboard/track-record')
 }
 
 export async function deleteTrackRecord(id: string) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  const { supabase } = await withAuth()
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase.from('track_records') as any)
+  const { error } = await supabase
+    .from('track_records')
     .delete()
     .eq('id', id)
-    .eq('user_id', user.id)
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    console.error('Gagal hapus track record:', error.message)
+    throw new Error('Gagal menghapus riwayat kerja. Silakan coba lagi.')
+  }
 
   revalidatePath('/dashboard/track-record')
 }
